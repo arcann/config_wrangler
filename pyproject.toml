@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "config_wrangler"
+version = "0.1.0"
+license = "MIT"
+authors = ["Derek Wood"]
+description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
+readme = "README.md"
+repository = "https://github.com/arcann/config_wrangler"
+
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pydantic = "^1.8.2"
+StrEnum = "^0.4.7"
+SQLAlchemy = {version = "^1.4", optional = true}
+boto3 = {version = "^1.4", optional = true}
+
+[tool.poetry.extras]
+sqlalchemy = ["SQLAlchemy"]
+redshift = ["boto3"]
+s3 = ["boto3"]
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
