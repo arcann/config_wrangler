@@ -197,8 +197,6 @@ def main():
     print(f"target_database.engine = {engine}")
     #> target_database.engine = Engine(sqlite:///.example_db)
 
-    # raise SystemExit("The S3 and DB code below won't actually work without an environment specific config")
-
     print("Getting S3 Data")
     bucket = config.s3_source.get_bucket()
     print(f"S3 bucket definition = {bucket}")

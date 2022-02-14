@@ -64,20 +64,6 @@ class ETLConfig(ConfigFromIniEnv):
     test_section: TestSection
 
 
-class ETLConfigAnyLoaders(ETLConfig):
-    def __init__(
-            self,
-            _config_data_loaders: typing.List[BaseConfigDataLoader],
-            **kwargs: typing.Dict[str, typing.Any]
-    ) -> None:
-        # Skip super and call the next higher class
-        ConfigFromLoaders.__init__(
-            self,
-            _config_data_loaders=_config_data_loaders,
-            **kwargs
-        )
-
-
 def main():
     config = ETLConfig(file_name='simple_example.ini')
 
@@ -110,8 +96,6 @@ def main():
     # Getting DB engine (requires sqlalchemy optional install
     engine = config.target_database.get_engine()
     print(f"target_database.engine = {engine}")
-
-    # raise SystemExit("The S3 and DB code below won't actually work without an environment specific config")
 
     print("Getting S3 Data")
     bucket = config.s3_source.get_bucket()
