@@ -8,10 +8,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from CaseInsensitiveDict import CaseInsensitiveDict
-from pydantic import BaseModel, ByteSize
+from pydantic import ByteSize
 from strenum import StrEnum
 
-from config_wrangler.types.paths_types import AutoCreateDirectoryPath
+from config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 from config_wrangler.utils import TZFormatter
 
 
@@ -25,7 +26,7 @@ class LogLevel(StrEnum):
     NOTSET = auto()
 
 
-class LoggingConfig(BaseModel):
+class LoggingConfig(ConfigHierarchy):
     console_log_level: LogLevel = LogLevel.INFO
     console_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
     log_folder: AutoCreateDirectoryPath
@@ -33,7 +34,7 @@ class LoggingConfig(BaseModel):
     log_file_name_date_time_format: str = '_%Y_%m_%d_at_%H_%M_%S'
     file_log_level: LogLevel = LogLevel.DEBUG
     log_file_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
-    log_file_max_size: ByteSize = '10 MB'
+    log_file_max_size: ByteSize = ByteSize.validate('10 MB').to('b')
     log_files_to_keep: int = 10
     logging_date_format: str = '%Y-%m-%d %H:%M:%S%z'
     trace_logging_setup: bool = False
@@ -127,8 +128,17 @@ class LoggingConfig(BaseModel):
                 log.info('No handler provided to remove_log_handler')
 
     @contextmanager
-    def log_file_manager(self, file_name: str):
-        log_file_handler = self.add_log_file_handler(log_file_name=file_name)
+    def log_file_manager(
+            self,
+            log_file_prefix: str = None,
+            add_date_to_log_file_name: bool = False,
+            log_file_suffix: str = '.log',
+    ):
+        log_file_handler = self.add_log_file_handler(
+            log_file_prefix=log_file_prefix,
+            add_date_to_log_file_name=add_date_to_log_file_name,
+            log_file_suffix=log_file_suffix,
+        )
         try:
             yield log_file_handler
         finally:

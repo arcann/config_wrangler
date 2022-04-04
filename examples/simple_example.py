@@ -1,14 +1,13 @@
 import typing
 from datetime import date, time, datetime
 
-from pydantic import BaseModel, DirectoryPath, Field, AnyHttpUrl
+from pydantic import DirectoryPath, Field, AnyHttpUrl
 
-from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
-from config_wrangler.config_from_ini_env import ConfigFromIniEnv, ConfigFromLoaders
+from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_templates.s3 import S3_Bucket
+from config_wrangler.config_templates.s3_bucket import S3_Bucket
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
-from config_wrangler.types.paths_types import AutoCreateDirectoryPath
+from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 
 
 class S3_Bucket_KeyPrefixes(S3_Bucket):
@@ -21,7 +20,7 @@ class Environment(ConfigHierarchy):
     source_data_dir: DirectoryPath
 
 
-class TestSection(BaseModel):
+class TestSection(ConfigHierarchy):
     my_int: int
     my_float: float
     my_bool: bool

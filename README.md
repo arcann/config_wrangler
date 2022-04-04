@@ -72,6 +72,7 @@ source_data_dir=.
 ```
 
 python code
+
 ```py
 import typing
 from datetime import date, time, datetime
@@ -79,11 +80,12 @@ from datetime import date, time, datetime
 from pydantic import BaseModel, DirectoryPath, Field, AnyHttpUrl
 
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
-from config_wrangler.config_from_ini_env import ConfigFromIniEnv, ConfigFromLoaders
+from config_wrangler.config_from_ini_env import ConfigFromIniEnv
+from config_from_loaders import ConfigFromLoaders
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_templates.s3 import S3_Bucket
+from config_wrangler.config_templates.s3_bucket import S3_Bucket
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
-from config_wrangler.types.paths_types import AutoCreateDirectoryPath
+from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 
 
 class S3_Bucket_KeyPrefixes(S3_Bucket):
@@ -126,7 +128,6 @@ class TestSection(BaseModel):
 
 
 class ETLConfig(ConfigFromIniEnv):
-
     class Config:
         validate_all = True
         validate_assignment = True
@@ -157,55 +158,55 @@ def main():
     config = ETLConfig(file_name='simple_example.ini')
 
     print(f"Temp data dir = {config.test_section.my_environment.temp_data_dir}")
-    #> Temp data dir = temp_data\dev
-    
+    # > Temp data dir = temp_data\dev
+
     print(f"Source data dir = {config.test_section.my_environment.source_data_dir}")
-    #> Source data dir = .
+    # > Source data dir = .
 
     print(f"my_int = {config.test_section.my_int}")
-    #> my_int = 123
-    
+    # > my_int = 123
+
     print(f"my_float = {config.test_section.my_float}")
-    #> my_float = 123.45
-    
+    # > my_float = 123.45
+
     print(f"my_str = {config.test_section.my_str}")
-    #> my_str = ABC☕
+    # > my_str = ABC☕
 
     print(f"my_list_auto_c = {config.test_section.my_list_auto_c}")
-    #> my_list_auto_c = ['a', 'b', 'c']
+    # > my_list_auto_c = ['a', 'b', 'c']
 
     print(f"my_list_auto_nl = {config.test_section.my_list_auto_nl}")
-    #> my_list_auto_c = ['a', 'b', 'c']
+    # > my_list_auto_c = ['a', 'b', 'c']
 
     print(f"my_dict = {config.test_section.my_dict}")
-    #> my_dict = {1: 'One', 2: 'Two'}
+    # > my_dict = {1: 'One', 2: 'Two'}
 
     print(f"my_set = {config.test_section.my_set}")
-    #> my_set = {'C', 'A', 'B'}
+    # > my_set = {'C', 'A', 'B'}
 
     print(f"my_time = {config.test_section.my_time}")
-    #> my_time = 11:55:23
+    # > my_time = 11:55:23
 
     print(f"my_datetime = {config.test_section.my_datetime}")
-    #> my_datetime = 2021-05-31 11:23:53
+    # > my_datetime = 2021-05-31 11:23:53
 
     print(f"my_url = {config.test_section.my_url}")
-    #> my_url = https://localhost:6553/
+    # > my_url = https://localhost:6553/
 
-  # Getting DB engine (requires sqlalchemy optional install
+    # Getting DB engine (requires sqlalchemy optional install
     engine = config.target_database.get_engine()
     print(f"target_database.engine = {engine}")
-    #> target_database.engine = Engine(sqlite:///.example_db)
+    # > target_database.engine = Engine(sqlite:///.example_db)
 
     print("Getting S3 Data")
     bucket = config.s3_source.get_bucket()
     print(f"S3 bucket definition = {bucket}")
     for prefix in config.s3_source.key_prefixes:
         print(f"  bucket search prefix = {prefix}")
-    #> Getting S3 Data
-    #> credentials.py:56: UserWarning: Passwords stored directly in config or worse in code are not safe. Please make sure to fix this before deploying.
-    #> S3 bucket definitition = s3.Bucket(name='my.exmple-bucket')
-    #> bucket search prefix = processed/
+    # > Getting S3 Data
+    # > credentials.py:56: UserWarning: Passwords stored directly in config or worse in code are not safe. Please make sure to fix this before deploying.
+    # > S3 bucket definitition = s3.Bucket(name='my.exmple-bucket')
+    # > bucket search prefix = processed/
 
 
 if __name__ == '__main__':

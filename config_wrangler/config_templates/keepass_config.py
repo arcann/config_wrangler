@@ -7,7 +7,7 @@ from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.credentials import Credentials, PasswordSource
 
 
-class Keepass(ConfigHierarchy):
+class KeepassConfig(ConfigHierarchy):
     database_path: Path
     password_source: PasswordSource = PasswordSource.KEYRING
     raw_password: str = None
@@ -30,11 +30,15 @@ class Keepass(ConfigHierarchy):
             from pykeepass import PyKeePass
 
             credentials_args = dict(**self.__dict__)
-            credentials_args['user_id'] = credentials_args.get('keyring_user_id')
+            if self.password_source == PasswordSource.KEYRING:
+                credentials_args['user_id'] = self.keyring_user_id
+            else:
+                credentials_args['user_id'] = 'not-real-userid_config-file'
+
             credentials = Credentials(**credentials_args)
-            password = credentials.get_password()
+            keepass_encryption_password = credentials.get_password()
             try:
-                self._db = PyKeePass(self.database_path, password=password)
+                self._db = PyKeePass(self.database_path, password=keepass_encryption_password)
             except Exception as e:
                 raise ValueError(f"PyKeePass error from {self.database_path}: {repr(e)}")
 

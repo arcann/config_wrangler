@@ -3,6 +3,7 @@ import typing
 import warnings
 from enum import auto
 
+import pydantic.typing
 from pydantic import PrivateAttr, root_validator
 from strenum import StrEnum
 
@@ -46,6 +47,7 @@ class Credentials(ConfigHierarchy):
                     f"and 'passwords' section does not have 'password_source' {e} "
                 )
 
+        search_info = ''
         if self.password_source == PasswordSource.KEYRING:
             if self.keyring_section is None:
                 raise ValueError(f"{self.full_item_name()} keyring_section is None but password_source was keyring")
@@ -57,19 +59,18 @@ class Credentials(ConfigHierarchy):
                 'Passwords stored directly in config or worse in code are not safe. Please make sure to fix this before deploying.'
             )
             password = self.raw_password
-            search_info = ''
         elif self.password_source == PasswordSource.KEEPASS:
             try:
                 keepass_config = getattr(self._root_config, self.keepass_config)
-            except KeyError:
+            except (KeyError, AttributeError):
                 raise ValueError(
-                    f"{self.full_item_name()} keepass_config section {self.keepass_config} not found in config data"
+                    f"{self.full_item_name()} Keepass config section '{self.keepass_config}' not found in config data"
                 )
             try:
                 get_password = keepass_config.get_password
             except AttributeError as e:
                 raise ValueError(
-                    f"{self.full_item_name()} keepass_config section {self.keepass_config} does not appear to be valid. "
+                    f"{self.full_item_name()} Keepass config section '{self.keepass_config}' does not appear to be valid. "
                     f"{e}"
                 )
 
@@ -119,12 +120,12 @@ class Credentials(ConfigHierarchy):
             self,
             to_dict: bool = False,
             by_alias: bool = False,
-            include: typing.Union['AbstractSetIntStr', 'MappingIntStrAny'] = None,
-            exclude: typing.Union['AbstractSetIntStr', 'MappingIntStrAny'] = None,
+            include: typing.Union['pydantic.typing.AbstractSetIntStr', 'pydantic.typing.MappingIntStrAny'] = None,
+            exclude: typing.Union['pydantic.typing.AbstractSetIntStr', 'pydantic.typing.MappingIntStrAny'] = None,
             exclude_unset: bool = False,
             exclude_defaults: bool = False,
             exclude_none: bool = False,
-    ) -> 'TupleGenerator':
+    ) -> 'pydantic.typing.TupleGenerator':
         """
         Iterate through the values, but hide any password (_private_value_atts)
         values in this output.  Passwords should be directly accessed by attribute name.

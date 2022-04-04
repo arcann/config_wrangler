@@ -6,7 +6,10 @@ class ConfigHierarchy(BaseModel):
     _parents = PrivateAttr()
 
     def full_item_name(self, item_name: str = None, delimiter: str = ' -> '):
-        if item_name is None:
-            return delimiter.join(self._parents)
-        else:
-            return delimiter.join(self._parents + item_name)
+        try:
+            if item_name is None:
+                return delimiter.join(self._parents)
+            else:
+                return delimiter.join(self._parents + item_name)
+        except AttributeError as e:
+            raise AttributeError(f"{e} not found in {repr(self)}")
