@@ -81,7 +81,7 @@ from pydantic import BaseModel, DirectoryPath, Field, AnyHttpUrl
 
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
-from config_from_loaders import ConfigFromLoaders
+from config_wrangler.config_from_loaders import ConfigFromLoaders
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.s3_bucket import S3_Bucket
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase

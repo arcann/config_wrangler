@@ -1,6 +1,6 @@
 import typing
 
-from config_from_loaders import ConfigFromLoaders
+from config_wrangler.config_from_loaders import ConfigFromLoaders
 from config_wrangler.config_data_loaders.ini_config_data_loader import IniConfigDataLoader
 
 

@@ -3,10 +3,10 @@ import typing
 
 from pydantic import BaseModel, PrivateAttr
 
-from config_data_loaders.base_config_data_loader import BaseConfigDataLoader
-from config_templates.config_hierarchy import ConfigHierarchy
-from config_templates.credentials import PasswordDefaults, Credentials
-from utils import merge_configs, interpolate_values
+from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
+from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.config_templates.credentials import PasswordDefaults, Credentials
+from config_wrangler.utils import merge_configs, interpolate_values
 
 
 class ConfigFromLoaders(ConfigHierarchy):

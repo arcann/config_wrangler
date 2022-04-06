@@ -11,7 +11,7 @@ from CaseInsensitiveDict import CaseInsensitiveDict
 from pydantic import ByteSize
 from strenum import StrEnum
 
-from config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 from config_wrangler.utils import TZFormatter
 

@@ -8,8 +8,8 @@ from unittest import mock
 import pydantic
 from pydantic import Field, AnyHttpUrl
 
-from config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
+from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
 
@@ -239,7 +239,7 @@ class TestIniParsee(unittest.TestCase):
             config.keepass.database_path = os.path.join(self.get_test_files_path(),  'keepass_db.kdbx')
             self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
 
-        except ValueError as e:
+        except (ValueError, ImportError) as e:
             if "No module named 'pykeepass" in str(e):
                 if PyKeePass is None:
                     self.skipTest(f"Test requires pykeepass")
@@ -320,7 +320,7 @@ class TestIniParsee(unittest.TestCase):
                 start_path=os.path.join(self.get_test_files_path())
             )
             self.assertEqual(config.target_database.get_password(), password)
-        except ValueError as e:
+        except (ValueError, ImportError) as e:
             if "No module named 'keyring'" in str(e):
                 if keyring is None:
                     self.skipTest(f"Test requires keyring")
