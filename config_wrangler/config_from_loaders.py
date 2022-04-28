@@ -1,7 +1,7 @@
 import logging
 import typing
 
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel
 
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
@@ -14,8 +14,6 @@ class ConfigFromLoaders(ConfigHierarchy):
     Base class for settings, allowing values to be set by files or environment variables.
     """
     passwords: PasswordDefaults = None
-
-    _name_map = PrivateAttr(default={})
 
     # noinspection PyMethodParameters
     def __init__(
@@ -84,29 +82,3 @@ class ConfigFromLoaders(ConfigHierarchy):
                         log.error(f"Error: {repr(e)}")
                         errors.add(repr(e))
 
-    # noinspection PyMethodMayBeStatic
-    def translate_config_data(self, config_data: typing.MutableMapping):
-        return config_data
-
-    def _translate_name(self, old_name):
-        if old_name in self._name_map:
-            return self._name_map[old_name]
-        else:
-            return old_name
-
-    def get(self, section, item, fallback=...):
-        try:
-            section_obj = getattr(self, self._translate_name(section))
-            return getattr(section_obj, item)
-        except AttributeError:
-            if fallback is ...:
-                raise
-            else:
-                return fallback
-
-    def __getitem__(self, section):
-        try:
-            section_obj = getattr(self, section)
-            return section_obj.dict()
-        except AttributeError as e:
-            raise KeyError(str(e))

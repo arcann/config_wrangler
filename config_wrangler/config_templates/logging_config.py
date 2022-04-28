@@ -3,27 +3,26 @@ import sys
 import typing
 from contextlib import contextmanager
 from datetime import datetime
-from enum import auto
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from CaseInsensitiveDict import CaseInsensitiveDict
 from pydantic import ByteSize
-from strenum import StrEnum
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 from config_wrangler.utils import TZFormatter
+from config_wrangler.config_types.enum import StrEnum, auto_str
 
 
 class LogLevel(StrEnum):
-    CRITICAL = auto()
-    FATAL = auto()
-    ERROR = auto()
-    WARNING = auto()
-    INFO = auto()
-    DEBUG = auto()
-    NOTSET = auto()
+    CRITICAL = auto_str()
+    FATAL = auto_str()
+    ERROR = auto_str()
+    WARNING = auto_str()
+    INFO = auto_str()
+    DEBUG = auto_str()
+    NOTSET = auto_str()
 
 
 class LoggingConfig(ConfigHierarchy):

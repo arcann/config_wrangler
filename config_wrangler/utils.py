@@ -7,7 +7,7 @@ from datetime import timezone, datetime
 
 from pydantic import BaseModel
 from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE, \
-    SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET, SHAPE_DICT, SHAPE_DEFAULTDICT, Field
+    SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET, SHAPE_DICT, SHAPE_DEFAULTDICT, Field, ModelField
 from pydantic.utils import lenient_issubclass
 
 from config_wrangler.config_exception import ConfigError
@@ -133,7 +133,144 @@ def full_name(parents: typing.List[str], field_name: str):
     return '.'.join(parents + [field_name])
 
 
-def match_config_data_to_model(model: BaseModel, config_data: typing.MutableMapping, root_config_data: typing.MutableMapping = None, parents=None):
+def inherit_fill(parent_config, child_config):
+    for inherit_key, inherit_value in parent_config.items():
+        if inherit_key not in child_config:
+            child_config[inherit_key] = inherit_value
+
+
+def find_referenced_section(
+        field: ModelField,
+        parents: typing.List[str],
+        section_name: typing.Union[str, typing.MutableMapping],
+        current_dict: typing.MutableMapping,
+        root_dict: typing.MutableMapping
+) -> typing.MutableMapping:
+    inherit = field.field_info.extra.get('inherit', False)
+    if isinstance(section_name, str):
+        if section_name in root_dict:
+            if inherit:
+                inherit_fill(current_dict, root_dict[section_name])
+            section_value = root_dict[section_name]
+        elif section_name in current_dict:
+            if inherit:
+                inherit_fill(current_dict, current_dict[section_name])
+            section_value = current_dict[section_name]
+        else:
+            raise ConfigError(
+                f"{full_name(parents, field.alias)} refers to section {section_name} which does not exist."
+            )
+        return section_value
+    else:
+        return section_name
+
+
+def match_config_data_to_field(
+        field: ModelField,
+        field_value: object,
+        create_from_section_names:bool,
+        parent_container: typing.MutableMapping,
+        root_config_data: typing.MutableMapping,
+        parents: typing.List[str],
+):
+    if field.shape == SHAPE_SINGLETON and field.type_ in {int, float}:
+        if field.type_ == int:
+            field_value = int(str(field_value))
+        elif field.type_ == float:
+            field_value = float(str(field_value))
+    elif (
+        field.shape in {SHAPE_LIST, SHAPE_TUPLE, SHAPE_TUPLE_ELLIPSIS, SHAPE_ITERABLE, SHAPE_SEQUENCE}
+        or (field.shape == SHAPE_SINGLETON and field.type_ in {list, tuple})
+    ):
+        if isinstance(field_value, str):
+            field_value = parse_delimited_list(field, field_value)
+
+        # Conditional change to field_value to obtain value from another config section
+        if create_from_section_names:
+            if not hasattr(field.type_, '__fields__'):
+                raise ValueError(f"{full_name(parents, field.alias)} has create_from_section_names but has no fields")
+
+            section_contents = list()
+            for section_name in field_value:
+                section_value = find_referenced_section(
+                    field=field,
+                    parents=parents,
+                    section_name=section_name,
+                    current_dict=parent_container,
+                    root_dict=root_config_data,
+                )
+                if field.sub_fields:
+                    # Transform section_value as needed
+                    sub_field = field.sub_fields[0]
+                    section_value = match_config_data_to_field_or_submodel(
+                        field=sub_field,
+                        parent_container={sub_field.alias: section_value},
+                        root_config_data=root_config_data,
+                        parents=parents + [field.alias, section_name]
+                    )
+                # Add name to the dict in case the model wants it
+                section_value['config_source_name'] = section_name
+                section_contents.append(section_value)
+            field_value = section_contents
+    elif (
+            field.shape in {SHAPE_DICT, SHAPE_DEFAULTDICT}
+            or (field.shape == SHAPE_SINGLETON and field.type_ in {dict})
+    ):
+        if isinstance(field_value, str):
+            try:
+                field_value = parse_as_literal_or_json(field_value)
+            except ValueError as e:
+                raise ConfigError(f"Field {full_name(parents, field.alias)} {e}")
+
+        # Conditional change to field_value to obtain value from another config section
+        if create_from_section_names:
+            section_contents = dict()
+            for key, value in field_value.items():
+                if field.sub_fields:
+                    sub_field = field.sub_fields[0]
+                    sub_field.field_info.extra['create_from_section_names'] = True
+                    # Transform section_value as needed
+                    section_value = match_config_data_to_field(
+                        field=sub_field,
+                        field_value=value,
+                        create_from_section_names=True,
+                        parent_container=field_value,
+                        root_config_data=root_config_data,
+                        parents=parents + [field.alias, key, value]
+                    )
+                    section_contents[key] = section_value
+                else:
+                    section_value = find_referenced_section(
+                        field=field,
+                        parents=parents,
+                        section_name=value,
+                        current_dict=parent_container,
+                        root_dict=root_config_data,
+                    )
+                    section_contents[key] = section_value
+            field_value = section_contents
+    elif (
+            field.shape in {SHAPE_SET}
+            or (field.shape == SHAPE_SINGLETON and field.type_ in {set})
+    ):
+        if isinstance(field_value, str):
+            field_value = set(parse_delimited_list(field, field_value))
+    elif (
+            field.shape in {SHAPE_FROZENSET}
+            or (field.shape == SHAPE_SINGLETON and field.type_ in {frozenset})
+    ):
+        if isinstance(field_value, str):
+            field_value = frozenset(parse_delimited_list(field, field_value))
+    # In all cases not explicitly matched above, we'll let pydantic parse it as is
+    return field_value
+
+
+def match_config_data_to_model(
+        model: BaseModel,
+        config_data: typing.MutableMapping,
+        root_config_data: typing.MutableMapping = None,
+        parents=None
+):
     if parents is None:
         parents = []
     if root_config_data is None:
@@ -147,6 +284,7 @@ def match_config_data_to_model(model: BaseModel, config_data: typing.MutableMapp
     for field in model.__fields__.values():
         # Check for either a direct name match or a case in-sensitive match
         field_lower = field.alias.lower()
+
         if field.alias in config_data:
             found = True
         elif field_lower in config_name_map:
@@ -164,84 +302,47 @@ def match_config_data_to_model(model: BaseModel, config_data: typing.MutableMapp
             section_name_lower = section_name.lower()
             if section_name in root_config_data:
                 found = True
+                # Copy data into place where pydantic will expect it
                 config_data[field.alias] = root_config_data[section_name]
             elif section_name_lower in root_config_name_map:
                 found = True
                 section_name = root_config_name_map[section_name_lower]
+                # Copy data into place where pydantic will expect it
                 config_data[field.alias] = root_config_data[section_name]
 
         if found:
-            # Check if we should recurse into deeper structures or parse strings into structures
-            value = config_data[field.alias]
-            if lenient_issubclass(field.type_, BaseModel) or hasattr(field.type_, '__fields__'):
-                create_from_section_names = field.field_info.extra.get('create_from_section_names', False)
-                if create_from_section_names:
-                    inherit = field.field_info.extra.get('inherit', False)
-                    if isinstance(value, str):
-                        section_names = parse_delimited_list(field, value)
-                    else:
-                        section_names = value
-                    section_contents = []
-                    for section in section_names:
-                        if isinstance(section, str):
-                            if section in root_config_data:
-                                if inherit:
-                                    for inherit_key, inherit_value in config_data.items():
-                                        if inherit_key not in root_config_data[section]:
-                                            root_config_data[section][inherit_key] = inherit_value
-                                match_config_data_to_model(field.type_, root_config_data[section], root_config_data=root_config_data, parents=parents + [field.alias])
-                                section_contents.append(root_config_data[section])
-                            elif section in config_data:
-                                if inherit:
-                                    for inherit_key, inherit_value in config_data.items():
-                                        if inherit_key not in config_data[section] and inherit_key != field.alias and inherit_key not in section_names:
-                                            config_data[section][inherit_key] = inherit_value
-                                match_config_data_to_model(field.type_, config_data[section], root_config_data=root_config_data, parents=parents + [field.alias])
-                                section_contents.append(config_data[section])
-                            else:
-                                raise ConfigError(f"{full_name(parents, field.alias)} refers to section {section} which does not exist.")
-                        else:
-                            # Not string, assume it's already the section contents
-                            section_contents.append(section)
-                    config_data[field.alias] = section_contents
-                else:
-                    match_config_data_to_model(field.type_, config_data[field.alias], root_config_data=root_config_data, parents=parents + [field.alias])
-            elif (
-                    field.shape in {SHAPE_LIST, SHAPE_TUPLE, SHAPE_TUPLE_ELLIPSIS, SHAPE_ITERABLE, SHAPE_SEQUENCE}
-                    or field.type_ in {list, tuple}
-            ):
-                if isinstance(value, str):
-                    config_data[field.alias] = parse_delimited_list(field, value)
-            elif (
-                    field.shape in {SHAPE_SET}
-                    or field.type_ in {set}
-            ):
-                if isinstance(value, str):
-                    config_data[field.alias] = set(parse_delimited_list(field, value))
-            elif (
-                    field.shape in {SHAPE_FROZENSET}
-                    or field.type_ in {frozenset}
-            ):
-                if isinstance(value, str):
-                    config_data[field.alias] = frozenset(parse_delimited_list(field, value))
-            elif (
-                    field.shape in {SHAPE_DICT, SHAPE_DEFAULTDICT}
-                    or field.type_ in {dict}
-            ):
-                if isinstance(value, str):
-                    try:
-                        config_data[field.alias] = parse_as_literal_or_json(value)
-                    except ValueError as e:
-                        raise ConfigError(f"Field {full_name(parents, field.alias)} {e}")
-            elif field.shape == SHAPE_SINGLETON:
-                if field.type_ == int:
-                    config_data[field.alias] = int(config_data[field.alias])
-                elif field.type_ == float:
-                    config_data[field.alias] = float(config_data[field.alias])
-            else:
-                pass
-                # We'll let pydantic parse it as is
+            updated_value = match_config_data_to_field_or_submodel(
+                field=field,
+                parent_container=config_data,
+                root_config_data=root_config_data,
+                parents=parents + [field.alias]
+            )
+            config_data[field.alias] = updated_value
+    return config_data
 
 
+def match_config_data_to_field_or_submodel(
+        field: ModelField,
+        parent_container: typing.MutableMapping,
+        root_config_data: typing.MutableMapping = None,
+        parents=None
+):
+    create_from_section_names = field.field_info.extra.get('create_from_section_names', False)
 
-
+    if hasattr(field.type_, '__fields__') and not create_from_section_names:
+        updated_value = match_config_data_to_model(
+            model=field.type_,
+            config_data=parent_container[field.alias],
+            root_config_data=root_config_data,
+            parents=parents
+        )
+    else:
+        updated_value = match_config_data_to_field(
+            field=field,
+            field_value=parent_container[field.alias],
+            create_from_section_names=create_from_section_names,
+            parent_container=parent_container,
+            root_config_data=root_config_data,
+            parents=parents
+        )
+    return updated_value

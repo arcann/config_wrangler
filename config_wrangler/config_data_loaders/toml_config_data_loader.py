@@ -37,7 +37,7 @@ class TomlConfigDataLoader(FileConfigDataLoader):
 
     def save_config_data(self, config_data: BaseModel):
         file_path = Path(self.start_path, self.file_name)
-        config_data_toml_ready = TomlConfigDataLoader.prepare_config_data(config_data)
+        config_data_toml_ready = TomlConfigDataLoader.prepare_config_data_for_save(config_data)
         with file_path.open('wt', encoding='utf8') as config_file:
             config_file.write(self.toml.dumps(config_data_toml_ready))
         self.log.info(f"Created {file_path}")
@@ -77,14 +77,14 @@ class TomlConfigDataLoader(FileConfigDataLoader):
         return field_value
 
     @staticmethod
-    def prepare_config_data(config: BaseModel, default_delimiter='\n', parents=None) -> dict:
+    def prepare_config_data_for_save(config: BaseModel, default_delimiter='\n', parents=None) -> dict:
         if parents is None:
             parents = []
         toml_data_dict = config.dict()
         for field in config.__fields__.values():
             field_value = toml_data_dict[field.alias]
             if field.shape == SHAPE_SINGLETON and lenient_issubclass(field.type_, BaseModel):
-                toml_data_dict[field.alias] = TomlConfigDataLoader.prepare_config_data(
+                toml_data_dict[field.alias] = TomlConfigDataLoader.prepare_config_data_for_save(
                     getattr(config, field.alias),
                     parents=parents + [field.alias]
                 )
@@ -98,7 +98,7 @@ class TomlConfigDataLoader(FileConfigDataLoader):
                     for sub_section_number, sub_section_value in enumerate(getattr(config, field.alias)):
                         sub_section_id = f"{field.alias}_{sub_section_number}"
                         section_name_list.append(sub_section_id)
-                        toml_data_dict[sub_section_id] = TomlConfigDataLoader.prepare_config_data(
+                        toml_data_dict[sub_section_id] = TomlConfigDataLoader.prepare_config_data_for_save(
                             sub_section_value,
                         )
                     toml_data_dict[field.alias] = section_name_list

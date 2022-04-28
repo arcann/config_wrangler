@@ -1,14 +1,14 @@
 import typing
-from pathlib import Path
 
 from pydantic import PrivateAttr, root_validator
 
+from config_wrangler.config_types.path_types import PathExpandUser
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.credentials import Credentials, PasswordSource
 
 
 class KeepassConfig(ConfigHierarchy):
-    database_path: Path
+    database_path: PathExpandUser
     password_source: PasswordSource = PasswordSource.KEYRING
     raw_password: str = None
     keyring_section: str = 's3'

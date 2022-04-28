@@ -56,7 +56,7 @@ class IniConfigDataLoader(FileConfigDataLoader):
 
     def save_config_data(self, config_data: BaseModel):
         file_path = Path(self.start_path, self.file_name)
-        config_data_ini_ready = IniConfigDataLoader.prepare_config_data(config_data)
+        config_data_ini_ready = IniConfigDataLoader.prepare_config_data_for_save(config_data)
 
         with file_path.open('wt') as config_file:
             for section, section_data in config_data_ini_ready.items():
@@ -74,7 +74,7 @@ class IniConfigDataLoader(FileConfigDataLoader):
         return field_value
 
     @staticmethod
-    def prepare_config_data(
+    def prepare_config_data_for_save(
             config: BaseModel,
             default_delimiter='\n',
             parents=None,
@@ -88,7 +88,7 @@ class IniConfigDataLoader(FileConfigDataLoader):
         for field in config.__fields__.values():
             field_value = config_data_dict[field.alias]
             if field.shape == SHAPE_SINGLETON and lenient_issubclass(field.type_, BaseModel):
-                section_data = IniConfigDataLoader.prepare_config_data(
+                section_data = IniConfigDataLoader.prepare_config_data_for_save(
                     config=getattr(config, field.alias),
                     parents=parents + [field.alias],
                     default_delimiter=default_delimiter,
@@ -111,7 +111,7 @@ class IniConfigDataLoader(FileConfigDataLoader):
                     for sub_section_number, sub_section_value in enumerate(getattr(config, field.alias)):
                         sub_section_id = f"{field.alias}_{sub_section_number}"
                         section_name_list.append(sub_section_id)
-                        root_config_data[sub_section_id] = IniConfigDataLoader.prepare_config_data(
+                        root_config_data[sub_section_id] = IniConfigDataLoader.prepare_config_data_for_save(
                             config=sub_section_value,
                             parents=None,
                             default_delimiter=default_delimiter,
