@@ -6,7 +6,7 @@ from datetime import date, time, datetime
 from unittest import mock
 
 import pydantic
-from pydantic import Field, AnyHttpUrl
+from pydantic import Field, AnyHttpUrl, DirectoryPath
 
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
@@ -54,8 +54,14 @@ class ConfigToTestWith(ConfigFromIniEnv):
     test_section: TestSection
 
 
+class TestSettings(ConfigHierarchy):
+    config_files_path: DirectoryPath
+
+
 class ConfigWithKeypass(ConfigToTestWith):
     keepass: KeepassConfig
+
+    test_settings: TestSettings
 
 
 class FakeKeepassConfig(ConfigHierarchy):
@@ -232,6 +238,7 @@ class TestIniParsee(unittest.TestCase):
             PyKeePass = None
 
         try:
+            os.environ['test_settings_config_files_path'] = self.get_test_files_path()
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
                 start_path=os.path.join(self.get_test_files_path())
@@ -270,6 +277,7 @@ class TestIniParsee(unittest.TestCase):
         try:
             from pykeepass import PyKeePass
 
+            os.environ['test_settings_config_files_path'] = self.get_test_files_path()
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
                 start_path=os.path.join(self.get_test_files_path())
@@ -289,6 +297,7 @@ class TestIniParsee(unittest.TestCase):
         try:
             from pykeepass import PyKeePass
 
+            os.environ['test_settings_config_files_path'] = self.get_test_files_path()
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
                 start_path=os.path.join(self.get_test_files_path())
