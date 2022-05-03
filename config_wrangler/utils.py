@@ -1,4 +1,5 @@
 import ast
+import inspect
 import json
 import logging
 import re
@@ -11,6 +12,7 @@ from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITER
 from pydantic.utils import lenient_issubclass
 
 from config_wrangler.config_exception import ConfigError
+from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
 
 
 class TZFormatter(logging.Formatter):
@@ -110,7 +112,7 @@ def parse_delimited_list(field: Field, value: str) -> typing.Sequence:
     delimiter = field.field_info.extra.get('delimiter', None)
     if delimiter is None and value[0] not in {'[', '{'}:
         # Try to automatically recognize the delimiter
-        for delimiter in [',', '\n', '|']:
+        for delimiter in ['\n', ',', '|']:
             if delimiter in value:
                 break
     if delimiter is not None:
@@ -168,16 +170,17 @@ def find_referenced_section(
 def match_config_data_to_field(
         field: ModelField,
         field_value: object,
-        create_from_section_names:bool,
+        create_from_section_names: bool,
         parent_container: typing.MutableMapping,
         root_config_data: typing.MutableMapping,
         parents: typing.List[str],
 ):
     if field.shape == SHAPE_SINGLETON and field.type_ in {int, float}:
-        if field.type_ == int:
-            field_value = int(str(field_value))
-        elif field.type_ == float:
-            field_value = float(str(field_value))
+        # if field.type_ == int:
+        #     field_value = int(str(field_value))
+        # elif field.type_ == float:
+        #     field_value = float(str(field_value))
+        pass
     elif (
         field.shape in {SHAPE_LIST, SHAPE_TUPLE, SHAPE_TUPLE_ELLIPSIS, SHAPE_ITERABLE, SHAPE_SEQUENCE}
         or (field.shape == SHAPE_SINGLETON and field.type_ in {list, tuple})
@@ -329,7 +332,20 @@ def match_config_data_to_field_or_submodel(
 ):
     create_from_section_names = field.field_info.extra.get('create_from_section_names', False)
 
-    if hasattr(field.type_, '__fields__') and not create_from_section_names:
+    if inspect.isclass(field.type_) and issubclass(field.type_, DynamicallyReferenced):
+        updated_value = match_config_data_to_field(
+            field=field,
+            field_value=parent_container[field.alias],
+            create_from_section_names=create_from_section_names,
+            parent_container=parent_container,
+            root_config_data=root_config_data,
+            parents=parents
+        )
+        if isinstance(updated_value, list):
+            updated_value = [{'ref': entry} for entry in updated_value]
+        else:  # Dict
+            updated_value = {key: {'ref': entry} for key, entry in updated_value.items()}
+    elif hasattr(field.type_, '__fields__') and not create_from_section_names:
         updated_value = match_config_data_to_model(
             model=field.type_,
             config_data=parent_container[field.alias],
@@ -346,3 +362,23 @@ def match_config_data_to_field_or_submodel(
             parents=parents
         )
     return updated_value
+
+
+def walk_model(
+        model: BaseModel,
+        parents=None
+):
+    if parents is None:
+        parents = []
+
+    # Scan all model fields to look for values in the MutableMapping
+    for field in model.__fields__.values():
+        if inspect.isclass(field.type_) and issubclass(field.type_, DynamicallyReferenced):
+            yield field, parents
+        elif hasattr(field.type_, '__fields__'):
+            yield from walk_model(
+                model=field.type_,
+                parents=parents + [field.alias]
+            )
+        else:
+            yield field, parents

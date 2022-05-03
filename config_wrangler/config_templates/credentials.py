@@ -116,6 +116,10 @@ class Credentials(ConfigHierarchy):
                 raise ValueError(f"{values} password_source is Config but password is not set")
         return values
 
+    def _validate_model_password(self):
+        if self.validate_password_on_load:
+            _ = self.get_password()
+
     def _iter(
             self,
             to_dict: bool = False,

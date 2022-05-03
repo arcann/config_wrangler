@@ -8,20 +8,20 @@ __all__ = ['DirectoryPath', 'AutoCreateDirectoryPath', 'DirectoryFindUp', 'PathE
 
 class PathExpandUser(DirectoryPath):
     @staticmethod
-    def __expand_user(path: Path):
+    def _expand_user(path: Path):
         path = path.expanduser()
         return path
 
     @classmethod
     def __get_validators__(cls):
         yield path_validator
-        yield cls.__expand_user
+        yield cls._expand_user
         super().__get_validators__()
 
 
-class AutoCreateDirectoryPath(DirectoryPath):
+class AutoCreateDirectoryPath(PathExpandUser):
     @staticmethod
-    def __ensure_exsits(path: Path):
+    def _ensure_exsits(path: Path):
         if not path.exists():
             os.makedirs(path)
         return path
@@ -29,7 +29,8 @@ class AutoCreateDirectoryPath(DirectoryPath):
     @classmethod
     def __get_validators__(cls):
         yield path_validator
-        yield cls.__ensure_exsits
+        yield cls._expand_user
+        yield cls._ensure_exsits
         super().__get_validators__()
 
 

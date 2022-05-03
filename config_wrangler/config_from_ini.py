@@ -12,6 +12,9 @@ class ConfigFromIni(ConfigFromLoaders):
             start_path: typing.Optional[str] = None,
             **kwargs: typing.Dict[str, typing.Any]
     ) -> None:
+        """
+        Note: Uses something other than `self` the first arg to allow "self" as a settable attribute
+        """
         ini_loader = IniConfigDataLoader(start_path=start_path, file_name=file_name)
         super().__init__(
             _config_data_loaders=[ini_loader],

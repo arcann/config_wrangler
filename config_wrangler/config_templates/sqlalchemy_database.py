@@ -3,8 +3,11 @@ import typing
 from datetime import datetime, timedelta
 
 from pydantic import PrivateAttr, root_validator
+from sqlalchemy.engine import Engine
+from sqlalchemy.sql.schema import DEFAULT_NAMING_CONVENTION
+
 try:
-    from sqlalchemy import create_engine, event
+    from sqlalchemy import create_engine, event, MetaData
     from sqlalchemy.engine.url import URL
     from sqlalchemy.orm import Session
     from sqlalchemy.pool import QueuePool, NullPool
@@ -86,6 +89,7 @@ class SQLAlchemyDatabase(Credentials):
             if self.dialect not in {'sqlite'}:
                 raise
             else:
+                # noinspection PyTypeChecker
                 return None
 
     def get_cluster_credentials(self):
@@ -147,7 +151,7 @@ class SQLAlchemyDatabase(Credentials):
             database=self.database_name,
         )
 
-    def get_engine(self):
+    def get_engine(self) -> Engine:
         if self._engine is None:
 
             kwargs = self.create_engine_args or {}
@@ -202,5 +206,22 @@ class SQLAlchemyDatabase(Credentials):
         else:
             return self.get_engine().connect()
 
-    def session(self, autocommit: bool = False):
+    def session(self, autocommit: bool = False) -> Session:
         return Session(bind=self.get_engine(), autocommit=autocommit)
+
+
+class SQLAlchemyMetadata(SQLAlchemyDatabase):
+    # Note: we can't name this field schema since that conflicts with pydantic
+    database_schema: str = None
+    quote_schema: str = None,
+    naming_convention: dict = DEFAULT_NAMING_CONVENTION
+
+    def get_metadata(
+            self,
+    ) -> MetaData:
+        engine = self.get_engine()
+        return MetaData(
+            bind=engine,
+            schema=self.database_schema,
+            quote_schema=self.quote_schema
+        )

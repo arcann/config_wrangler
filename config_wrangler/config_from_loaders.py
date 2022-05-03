@@ -1,11 +1,11 @@
 import logging
 import typing
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_templates.credentials import PasswordDefaults, Credentials
+from config_wrangler.config_templates.credentials import PasswordDefaults
 from config_wrangler.utils import merge_configs, interpolate_values
 
 
@@ -13,6 +13,7 @@ class ConfigFromLoaders(ConfigHierarchy):
     """
     Base class for settings, allowing values to be set by files or environment variables.
     """
+    _model_validators: PrivateAttr(default=[])
     passwords: PasswordDefaults = None
 
     # noinspection PyMethodParameters
@@ -21,8 +22,11 @@ class ConfigFromLoaders(ConfigHierarchy):
         _config_data_loaders: typing.List[BaseConfigDataLoader],
         **kwargs: typing.Dict[str, typing.Any]
     ) -> None:
+        """
+        Note: Uses something other than `self` the first arg to allow "self" as a settable attribute
+        """
         log = logging.getLogger(__name__)
-        # Uses something other than `self` the first arg to allow "self" as a settable attribute
+
         config_data = dict(**kwargs)
         for loader in _config_data_loaders:
             log.debug(f"Loading config with {loader}")
@@ -35,19 +39,34 @@ class ConfigFromLoaders(ConfigHierarchy):
         log.debug(f"Calling pydantic __init__")
         super().__init__(**config_data)
         log.debug("Calling fill_hierarchy to fill in root and parent data")
-        errors = set()
-        __pydantic_self__.fill_hierarchy(
-            model_level=__pydantic_self__,
-            parents=[],
-            errors=errors,
-        )
-        if len(errors) > 0:
-            log.error(f"{len(errors)} config errors found:")
-            for error in errors:
-                log.error(error)
-            indent = ' '*3
-            errors_str = f"\n{indent}".join(errors)
-            raise ValueError(f"Config Errors (cnt={len(errors)}). Errors=\n{indent}{errors_str}")
+        __pydantic_self__.validate_model()
+
+    def fill_hierarchy_any_type(
+            self,
+            value: object,
+            parents: typing.List[str],
+            errors: set,
+    ):
+        if isinstance(value, BaseModel):
+            self.fill_hierarchy(
+                model_level=value,
+                parents=parents,
+                errors=errors
+            )
+        elif isinstance(value, list):
+            for index, entry in enumerate(value):
+                self.fill_hierarchy_any_type(
+                    value=entry,
+                    parents=parents + [f"[{index}]"],
+                    errors=errors
+                )
+        elif isinstance(value, dict):
+            for key, entry in value.items():
+                self.fill_hierarchy_any_type(
+                    value=entry,
+                    parents=parents + [f"[{key}]"],
+                    errors=errors
+                )
 
     def fill_hierarchy(
             self,
@@ -67,18 +86,34 @@ class ConfigFromLoaders(ConfigHierarchy):
         except AttributeError as e:
             log.warning(f"{parents} {repr(model_level)} is not an instance inheriting from ConfigHierarchy: {e}")
         for attr_name, attr_value in model_level.__dict__.items():
-            if isinstance(attr_value, BaseModel):
-                self.fill_hierarchy(
-                    model_level=attr_value,
-                    parents=parents + [attr_name],
-                    errors=errors
-                )
+            self.fill_hierarchy_any_type(
+                value=attr_value,
+                parents=parents + [attr_name],
+                errors=errors
+            )
 
-            if isinstance(attr_value, Credentials):
-                if attr_value.validate_password_on_load:
+        # Run any model level validators
+        for attr in dir(model_level):
+            if attr.startswith('_validate_model_'):
+                method = getattr(model_level, attr)
+                if callable(method):
                     try:
-                        _ = attr_value.get_password()
-                    except Exception as e:
-                        log.error(f"Error: {repr(e)}")
-                        errors.add(repr(e))
+                        method()
+                    except (ValueError, TypeError, AssertionError) as exc:
+                        errors.add(repr(exc))
 
+    def validate_model(self):
+        errors = set()
+        self.fill_hierarchy(
+            model_level=self,
+            parents=[],
+            errors=errors,
+        )
+        if len(errors) > 0:
+            log = logging.getLogger(__name__)
+            log.error(f"{len(errors)} config errors found:")
+            for error in errors:
+                log.error(error)
+            indent = ' ' * 3
+            errors_str = f"\n{indent}".join(errors)
+            raise ValueError(f"Config Errors (cnt={len(errors)}). Errors=\n{indent}{errors_str}")
