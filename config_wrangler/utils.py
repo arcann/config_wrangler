@@ -175,12 +175,19 @@ def match_config_data_to_field(
         root_config_data: typing.MutableMapping,
         parents: typing.List[str],
 ):
-    if field.shape == SHAPE_SINGLETON and field.type_ in {int, float}:
-        # if field.type_ == int:
-        #     field_value = int(str(field_value))
-        # elif field.type_ == float:
-        #     field_value = float(str(field_value))
-        pass
+    if field.shape == SHAPE_SINGLETON and field.type_ not in {list, tuple, dict, set, frozenset}:
+        if create_from_section_names:
+            if not hasattr(field.type_, '__fields__'):
+                raise ValueError(f"{full_name(parents, field.alias)} has create_from_section_names but has no fields")
+            section_value = find_referenced_section(
+                field=field,
+                parents=parents,
+                section_name=field_value,
+                current_dict=parent_container,
+                root_dict=root_config_data,
+            )
+            section_value['config_source_name'] = field_value
+            field_value = section_value
     elif (
         field.shape in {SHAPE_LIST, SHAPE_TUPLE, SHAPE_TUPLE_ELLIPSIS, SHAPE_ITERABLE, SHAPE_SEQUENCE}
         or (field.shape == SHAPE_SINGLETON and field.type_ in {list, tuple})

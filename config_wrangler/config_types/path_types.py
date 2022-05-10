@@ -1,10 +1,17 @@
 import os
+import shutil
 from pathlib import Path
-from pydantic import DirectoryPath
+from pydantic import DirectoryPath, FilePath
 from pydantic.validators import path_validator
 
-__all__ = ['DirectoryPath', 'AutoCreateDirectoryPath', 'DirectoryFindUp', 'PathExpandUser']
-
+__all__ = [
+    'FilePath',
+    'DirectoryPath',
+    'AutoCreateDirectoryPath',
+    'DirectoryFindUp',
+    'PathExpandUser',
+    'ExecutablePath',
+]
 
 class PathExpandUser(DirectoryPath):
     @staticmethod
@@ -52,3 +59,19 @@ class DirectoryFindUp(DirectoryPath):
         yield path_validator
         yield cls.__find_up
         yield cls.validate
+
+
+class ExecutablePath(Path):
+    @staticmethod
+    def __find_in_system_path(path: Path):
+        full_path = shutil.which(path)
+        if full_path is None:
+            raise FileNotFoundError(f"{path} not found")
+        # Note: on Windows any existing file appears as executable
+        elif not os.access(path, os.X_OK):
+            raise ValueError(f"{path} found but is not executable")
+
+    @classmethod
+    def __get_validators__(cls):
+        yield path_validator
+        yield cls.__find_in_system_path

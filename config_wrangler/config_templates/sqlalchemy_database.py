@@ -44,6 +44,12 @@ class SQLAlchemyDatabase(Credentials):
     # Values to hide from config exports
     _private_value_atts = PrivateAttr(default={'password', 'aws_secret_access_key'})
 
+    def __repr__(self):
+        return f"SQLAlchemyDatabase({self.get_uri()})"
+
+    def __str__(self):
+        return str(self.get_uri())
+
     @root_validator(pre=True)
     def translate(cls, values):
         # Convert from old setting names to new names
@@ -197,6 +203,9 @@ class SQLAlchemyDatabase(Credentials):
             # End engine_do_connect sub function
 
         return self._engine
+
+    def raw_connection(self):
+        return self.get_engine().raw_connection()
 
     def connect(self):
         if self.dialect == 'sqlite':
