@@ -1,5 +1,4 @@
 from typing import *
-from pathlib import PurePosixPath, Path
 
 from pydantic import PrivateAttr
 
@@ -39,12 +38,20 @@ class AWS_Session(Credentials):
             )
         return self._session
 
-    def get_resource(self, service: str = None):
+    @property
+    def resource(self):
+        return self._get_resource()
+
+    @property
+    def client(self):
+        return self._get_client()
+
+    def _get_resource(self, service: str = None):
         if service is None:
             service = self._service
         return self.session.resource(service, region_name=self.region_name)
 
-    def get_client(self, service: str = None):
+    def _get_client(self, service: str = None):
         if service is None:
             service = self._service
         return self.session.client(service, region_name=self.region_name)

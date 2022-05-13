@@ -13,6 +13,7 @@ __all__ = [
     'ExecutablePath',
 ]
 
+
 class PathExpandUser(DirectoryPath):
     @staticmethod
     def _expand_user(path: Path):

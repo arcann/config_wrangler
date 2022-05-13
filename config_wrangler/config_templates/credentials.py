@@ -82,7 +82,10 @@ class Credentials(ConfigHierarchy):
                     raise ValueError(
                         f"{self.full_item_name()} keepass_group not specified. "
                     )
-            password = get_password(self.keepass_group, self.keepass_title, self.user_id)
+            try:
+                password = get_password(self.keepass_group, self.keepass_title, self.user_id)
+            except ValueError as e:
+                raise ValueError(f"{self.full_item_name()} error {e}")
 
         else:
             raise ValueError(f"{self.full_item_name()} invalid password_source {self.password_source}")
