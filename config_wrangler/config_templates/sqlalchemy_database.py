@@ -222,7 +222,7 @@ class SQLAlchemyDatabase(Credentials):
 class SQLAlchemyMetadata(SQLAlchemyDatabase):
     # Note: we can't name this field schema since that conflicts with pydantic
     database_schema: str = None
-    quote_schema: str = None,
+    quote_schema: str = None
     naming_convention: dict = DEFAULT_NAMING_CONVENTION
 
     def get_metadata(

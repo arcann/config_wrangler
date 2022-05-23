@@ -3,6 +3,7 @@ import os
 import typing
 import unittest
 from datetime import date, time, datetime
+from pathlib import Path
 from unittest import mock
 
 import pydantic
@@ -12,6 +13,7 @@ from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
+from tests.base_tests_mixin import Base_Tests_Mixin
 
 
 class TestSection(ConfigHierarchy):
@@ -72,17 +74,9 @@ class ConfigWithBadKeypass(ConfigToTestWith):
     keepass: FakeKeepassConfig
 
 
-class TestIniParsee(unittest.TestCase):
+class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
         self.test_files_path = self.get_test_files_path()
-
-    def get_package_path(self):
-        module_path = inspect.getfile(self.__class__)
-        (tests_path, _) = os.path.split(module_path)
-        return tests_path
-
-    def get_test_files_path(self):
-        return os.path.join(self.get_package_path(), 'test_config_files')
 
     def tearDown(self):
         pass
@@ -238,7 +232,7 @@ class TestIniParsee(unittest.TestCase):
             PyKeePass = None
 
         try:
-            os.environ['test_settings_config_files_path'] = self.get_test_files_path()
+            os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
                 start_path=os.path.join(self.get_test_files_path())
@@ -277,7 +271,7 @@ class TestIniParsee(unittest.TestCase):
         try:
             from pykeepass import PyKeePass
 
-            os.environ['test_settings_config_files_path'] = self.get_test_files_path()
+            os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
                 start_path=os.path.join(self.get_test_files_path())
@@ -297,7 +291,7 @@ class TestIniParsee(unittest.TestCase):
         try:
             from pykeepass import PyKeePass
 
-            os.environ['test_settings_config_files_path'] = self.get_test_files_path()
+            os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
                 start_path=os.path.join(self.get_test_files_path())

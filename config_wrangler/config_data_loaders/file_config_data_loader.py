@@ -10,6 +10,9 @@ from config_wrangler.utils import merge_configs, match_config_data_to_model
 
 
 class FileConfigDataLoader(BaseConfigDataLoader):
+    config_inheritance_section: str = 'Config'
+    config_inheritance_field_name_prefix: str = 'parent'
+
     def __init__(
             self,
             file_name: str,
@@ -29,7 +32,13 @@ class FileConfigDataLoader(BaseConfigDataLoader):
             full_path = Path(path, file_name)
 
         if full_path.exists():
-            file_config_data = self._read_file(full_path)
+            file_config_data = self._read_file_plus_inherited(full_path)
+            # Check for and remove any [Config] parent settings.
+            # They should have already been used, but we don't want to merge them up
+            if self.config_inheritance_section in file_config_data:
+                for field_name in list(file_config_data[self.config_inheritance_section]):
+                    if field_name.startswith(self.config_inheritance_field_name_prefix):
+                        del file_config_data[self.config_inheritance_section][field_name]
             merge_configs(config_data, file_config_data)
         elif fail_on_does_not_exist:
             raise FileNotFoundError(f"{file_name} not found with path = {path}")
@@ -39,13 +48,12 @@ class FileConfigDataLoader(BaseConfigDataLoader):
             self,
             config_data: typing.MutableMapping,
             path: Path,
-            config_inheritance_section: str = 'Config',
-            config_inheritance_field_name_prefix: str = 'parent'
+
     ) -> typing.MutableMapping:
-        if config_inheritance_section in config_data:
-            for field_name in config_data[config_inheritance_section]:
-                if field_name.startswith(config_inheritance_field_name_prefix):
-                    file_name = config_data[config_inheritance_section][field_name]
+        if self.config_inheritance_section in config_data:
+            for field_name in config_data[self.config_inheritance_section]:
+                if field_name.startswith(self.config_inheritance_field_name_prefix):
+                    file_name = config_data[self.config_inheritance_section][field_name]
                     if '\n' in file_name:
                         for file_name_part in file_name.split('\n'):
                             self._merge_files_into_config_data(config_data, path, file_name_part)
@@ -55,7 +63,9 @@ class FileConfigDataLoader(BaseConfigDataLoader):
 
     def _read_file_plus_inherited(self, file_path: Path):
         file_config_data = self._read_file(file_path)
-        return self._check_inherited_files(file_config_data, path=file_path.parents[0])
+        folder = file_path.parents[0]
+        with_parents_added = self._check_inherited_files(file_config_data, path=folder)
+        return with_parents_added
 
     def read_config_data(self, model: BaseModel) -> typing.MutableMapping:
         full_path = Path(self.start_path, self.file_name)

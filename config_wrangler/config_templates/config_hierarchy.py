@@ -1,4 +1,4 @@
-from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict
+from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Type
 
 from pydantic import PrivateAttr, BaseModel
 
@@ -76,3 +76,7 @@ class ConfigHierarchy(BaseModel):
             return section_obj.dict()
         except AttributeError as e:
             raise KeyError(str(e))
+
+    def set_as_child(self, name: str, otherConfigItem: 'ConfigHierarchy'):
+        otherConfigItem._parents = self._parents + [name]
+        otherConfigItem._root_config = self._root_config

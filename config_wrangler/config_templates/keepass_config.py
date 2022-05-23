@@ -17,6 +17,7 @@ class KeepassConfig(ConfigHierarchy):
 
     _db = PrivateAttr(default=None)
     _alternate_group_names_lower = PrivateAttr(default=None)
+    _keepass_credentials = PrivateAttr(default=None)
 
     @root_validator
     def check_password(cls, values):
@@ -35,8 +36,9 @@ class KeepassConfig(ConfigHierarchy):
             else:
                 credentials_args['user_id'] = 'not-real-userid_config-file'
 
-            credentials = Credentials(**credentials_args)
-            keepass_encryption_password = credentials.get_password()
+            self._keepass_credentials = Credentials(**credentials_args)
+            self.set_as_child('_keepass_credentials', self._keepass_credentials)
+            keepass_encryption_password = self._keepass_credentials.get_password()
             try:
                 self._db = PyKeePass(self.database_path, password=keepass_encryption_password)
             except Exception as e:

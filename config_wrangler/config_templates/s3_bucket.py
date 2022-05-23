@@ -71,15 +71,27 @@ class S3_Bucket(AWS_Session):
     def delete_by_key(self, key: Union[str, PurePosixPath]):
         self.client.delete_object(Bucket=self.bucket_name, Key=str(key))
 
-    def list_object_keys(self, key: Union[str, PurePosixPath]) -> List[str]:
-        paginator = self.client.get_paginator('list_objects_v2')
-        response = paginator.paginate(Bucket=self.bucket_name, Prefix=key)
-        return [obj['Key'] for obj in response['Contents']]
+    def find_objects(self, key: Union[str, PurePosixPath] = None) -> Iterable['botostubs.S3.S3Resource.ObjectSummary']:
+        if key is None:
+            key = ''
+        collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=str(key))
+        return collection
+
+    def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
+        obj_collecion = self.find_objects(key)
+        return [obj.key for obj in obj_collecion]
+
+    def list_object_paths(self, key: Union[str, PurePosixPath]) -> List[PurePosixPath]:
+        return [PurePosixPath(key) for key in self.list_object_keys(key)]
 
     def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket':
         new_instance = self.copy(deep=False)
-        new_instance._root_config = self._root_config
-        new_instance._parents = self._parents + [copied_by]
+        try:
+            self.set_as_child(copied_by, new_instance)
+        except AttributeError:
+            # Make the copy it's own root
+            new_instance._root_config = new_instance
+            new_instance._parents = []
         return new_instance
 
     def nav_to_bucket(self, bucket_name) -> 'S3_Bucket':
@@ -144,6 +156,11 @@ class S3_Bucket_Folder(S3_Bucket):
         if key is None:
             key = self.folder
         return super().list_object_keys(key=key)
+
+    def list_object_paths(self, key: Union[str, PurePosixPath] = None) -> List[PurePosixPath]:
+        if key is None:
+            key = self.folder
+        return super().list_object_paths(key=key)
 
 
 class S3_Bucket_Folder_File(S3_Bucket_Folder):

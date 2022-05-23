@@ -30,6 +30,7 @@ class LoggingConfig(ConfigHierarchy):
     console_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
     log_folder: AutoCreateDirectoryPath
     log_file_name: str = None
+    add_date_to_log_file_name: bool = True
     log_file_name_date_time_format: str = '_%Y_%m_%d_at_%H_%M_%S'
     file_log_level: LogLevel = LogLevel.DEBUG
     log_file_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
@@ -62,11 +63,13 @@ class LoggingConfig(ConfigHierarchy):
     def add_log_file_handler(
             self,
             log_file_prefix: str = None,
-            add_date_to_log_file_name: bool = False,
+            add_date_to_log_file_name: bool = None,
             log_file_suffix: str = '.log',
     ) -> logging.Handler:
         log = logging.getLogger(__name__)
         root_logger = logging.getLogger()
+        if add_date_to_log_file_name is None:
+            add_date_to_log_file_name = self.add_date_to_log_file_name
         if log_file_prefix is None:
             if self.log_file_name is not None:
                 log_file_name = self.log_file_name
@@ -201,7 +204,7 @@ class LoggingConfig(ConfigHierarchy):
     def setup_logging(
             self,
             log_file_prefix: str = None,
-            add_date_to_log_file_name: bool = False,
+            add_date_to_log_file_name: bool = None,
             log_file_suffix: str = '.log',
             console_output=None,
             use_log_file_setting=True,
@@ -252,7 +255,7 @@ class LoggingConfig(ConfigHierarchy):
             def non_error(record):
                 return record.levelno != logging.ERROR
 
-            # Errors go to console_error_log above so we don't want them here as well
+            # Errors go to console_error_log above, so we don't want them here as well
             console_log.addFilter(non_error)
 
             root_logger.addHandler(console_log)
