@@ -20,7 +20,7 @@ class Credentials(ConfigHierarchy):
     user_id: str
     password_source: PasswordSource = None
     raw_password: str = None
-    keyring_section: str = 's3'
+    keyring_section: str = None
     keepass_config: str = 'keepass'
     keepass_group: str = None
     keepass_title: str = None
@@ -39,13 +39,19 @@ class Credentials(ConfigHierarchy):
                 raise ValueError(
                     f"{self.full_item_name()} password_source not provided and 'passwords' section not found"
                 )
-            try:
-                self.password_source = passwords_defaults.password_source
-            except AttributeError as e:
+            if passwords_defaults is None:
                 raise ValueError(
                     f"{self.full_item_name()} password_source not provided "
-                    f"and 'passwords' section does not have 'password_source' {e} "
+                    f"and 'passwords' section does not exist."
                 )
+            else:
+                try:
+                    self.password_source = passwords_defaults.password_source
+                except AttributeError as e:
+                    raise ValueError(
+                        f"{self.full_item_name()} password_source not provided "
+                        f"and 'passwords' section does not have 'password_source' {e} "
+                    )
 
         search_info = ''
         if self.password_source == PasswordSource.KEYRING:
@@ -74,14 +80,6 @@ class Credentials(ConfigHierarchy):
                     f"{e}"
                 )
 
-            if self.keepass_group is None:
-                if self.keyring_section is not None:
-                    log.info(f"keepass_group not provided but keyring_section = {self.keyring_section}, using that for keepass group")
-                    self.keepass_group = self.keyring_section
-                else:
-                    raise ValueError(
-                        f"{self.full_item_name()} keepass_group not specified. "
-                    )
             try:
                 password = get_password(self.keepass_group, self.keepass_title, self.user_id)
             except ValueError as e:

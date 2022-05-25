@@ -349,7 +349,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
             password = 'mysuperpassword'
             if keyring is not None:
                 # If keyring is actually installed, use it to set the password
-                keyring.set_password('s3', 'python_unittester_01', password)
+                keyring.set_password('example_section', 'python_unittester_01', password)
             config = ConfigToTestWith(
                 file_name='simple_example_keyring.ini',
                 start_path=self.get_test_files_path()

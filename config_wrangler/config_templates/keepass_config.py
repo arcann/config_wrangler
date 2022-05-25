@@ -9,9 +9,10 @@ from config_wrangler.config_templates.credentials import Credentials, PasswordSo
 
 class KeepassConfig(ConfigHierarchy):
     database_path: PathExpandUser
+    default_group: str = None
     password_source: PasswordSource = PasswordSource.KEYRING
     raw_password: str = None
-    keyring_section: str = 's3'
+    keyring_section: str = None
     keyring_user_id: str = None
     alternate_group_names: typing.Dict[str, str] = {}
 
@@ -51,6 +52,11 @@ class KeepassConfig(ConfigHierarchy):
         kp = self.open_database()
 
         group_matches = list()
+        if group is None:
+            if self.default_group is not None:
+                group = self.default_group
+            else:
+                raise ValueError(f"keepass_group not provided and keepass:default_group also not provided")
         group_lower = group.lower()
         group_search_set = {group_lower}
         alt_group_lower = self._alternate_group_names_lower.get(group_lower)

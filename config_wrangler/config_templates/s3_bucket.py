@@ -64,11 +64,24 @@ class S3_Bucket(AWS_Session):
             Config=transfer_config,
         )
 
+    def key_exists(self, key: Union[str, PurePosixPath]) -> bool:
+        try:
+            self.client.head_object(Bucket=self.bucket_name, Key=str(key))
+            return True
+        except Exception:
+            return False
+
     def get_object(self, key: Union[str, PurePosixPath]):
         return self.resource.Object(self.bucket_name, str(key))
 
-    def delete_by_key(self, key: Union[str, PurePosixPath]):
-        self.client.delete_object(Bucket=self.bucket_name, Key=str(key))
+    def delete_by_key(self, key: Union[str, PurePosixPath], version_id: str = None):
+        kwargs = {
+            'Bucket': self.bucket_name,
+            'Key': str(key),
+        }
+        if version_id is not None:
+            kwargs['VersionId'] = version_id
+        self.client.delete_object(**kwargs)
 
     def find_objects(self, key: Union[str, PurePosixPath] = None) -> Iterable['botostubs.S3.S3Resource.ObjectSummary']:
         if key is None:
@@ -77,33 +90,46 @@ class S3_Bucket(AWS_Session):
         return collection
 
     def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
-        obj_collecion = self.find_objects(key)
-        return [obj.key for obj in obj_collecion]
+        obj_collection = self.find_objects(key)
+        return [obj.key for obj in obj_collection]
 
     def list_object_paths(self, key: Union[str, PurePosixPath]) -> List[PurePosixPath]:
         return [PurePosixPath(key) for key in self.list_object_keys(key)]
 
     def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket':
-        new_instance = self.copy(deep=False)
-        try:
-            self.set_as_child(copied_by, new_instance)
-        except AttributeError:
-            # Make the copy it's own root
-            new_instance._root_config = new_instance
-            new_instance._parents = []
-        return new_instance
+        return cast('S3_Bucket', super().get_copy(copied_by))
 
-    def nav_to_bucket(self, bucket_name) -> 'S3_Bucket':
-        new_instance = self.get_copy()
-        new_instance.bucket_name = bucket_name
-        return new_instance
+    def nav_to_key(self, key) -> 'S3_Bucket_Key':
+        return S3_Bucket_Key(
+            key=key,
+            **self.dict(exclude={'key'})
+        )
+
+    def nav_to_folder(self, folder) -> 'S3_Bucket_Folder':
+        return S3_Bucket_Folder(
+            folder=folder,
+            **self._private_attr_dict(),
+            **self.dict(exclude={'folder'})
+        )
+
+    def __truediv__(self, key) -> Union['S3_Bucket_Key', 'S3_Bucket_Folder']:
+        if key[-1] == '/' or key == '':
+            return self.nav_to_folder(key)
+        else:
+            return self.nav_to_key(key)
 
 
 class S3_Bucket_Folder(S3_Bucket):
+    """
+        Represents a folder within an S3 bucket.
+    """
     folder: str
 
     def __str__(self):
         return f"s3://{self.bucket_name}/{self.folder}"
+
+    def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket_Folder':
+        return cast('S3_Bucket_Folder', super().get_copy(copied_by))
 
     def upload_folder_file(
         self,
@@ -135,21 +161,27 @@ class S3_Bucket_Folder(S3_Bucket):
             transfer_config=transfer_config,
         )
 
+    def nav_to_folder(self, folder_key) -> 'S3_Bucket_Folder':
+        new_folder = self.get_copy(copied_by=f".nav_to_folder({folder_key})")
+        new_folder.folder = folder_key
+        return new_folder
+
+    def nav_to_file(self, file_name) -> 'S3_Bucket_Folder_File':
+        new_folder_file = S3_Bucket_Folder_File(
+            file_name=file_name,
+            **self.dict(exclude={'file_name'})
+        )
+        new_folder_file.file_name = file_name
+        return new_folder_file
+
     def joinpath(self, *other) -> 'S3_Bucket_Folder':
-        new_folder = self.get_copy(copied_by=f".join({other})")
+        new_folder = self.get_copy(copied_by=f".joinpath({other})")
         new_key = PurePosixPath(self.folder, *other)
         new_folder.folder = str(new_key)
         return new_folder
 
     def __truediv__(self, other) -> 'S3_Bucket_Folder':
         return self.joinpath(other)
-
-    def key_exists(self, key: Union[str, PurePosixPath]):
-        try:
-            self.client.head_object(Bucket=self.bucket_name, Key=str(key))
-            return True
-        except Exception:
-            return False
 
     def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
         if key is None:
@@ -161,13 +193,25 @@ class S3_Bucket_Folder(S3_Bucket):
             key = self.folder
         return super().list_object_paths(key=key)
 
+    def key_exists(self, key: Union[str, PurePosixPath] = None) -> bool:
+        if key is None:
+            key = self.folder
+        return super().key_exists(key)
+
 
 class S3_Bucket_Folder_File(S3_Bucket_Folder):
+    """
+        Represents a unique folder & file within an S3 bucket.
+        Similar to S3_Bucket_Key but uses folder + file_name instead of a single key.
+    """
     folder: str
     file_name: str
 
     def __str__(self):
         return f"s3://{self.bucket_name}/{self.folder}/{self.file_name}"
+
+    def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket_Folder_File':
+        return cast('S3_Bucket_Folder_File', super().get_copy(copied_by))
 
     def upload_specified_file(
         self,
@@ -195,12 +239,29 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
             transfer_config=transfer_config,
         )
 
+    def get_object(self, key: Union[str, PurePosixPath] = None):
+        if key is None:
+            key = f"{self.folder}/{self.file_name}"
+        return super().get_object(key=key)
+
 
 class S3_Bucket_Key(S3_Bucket):
+    """
+    Represents a unique file (key) within an S3 bucket.
+    Similar to S3_Bucket_Folder_File but uses a single key instead of folder + file_name
+    """
     key: str
 
     def __str__(self):
         return f"s3://{self.bucket_name}/{self.key}"
+
+    def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket_Key':
+        return cast('S3_Bucket_Key', super().get_copy(copied_by))
+
+    def nav_to_key(self, key) -> 'S3_Bucket_Key':
+        new_bucket_key = self.get_copy(copied_by=f".nav_to_key({key})")
+        new_bucket_key.file_name = key
+        return new_bucket_key
 
     def upload_specified_file(
         self,
@@ -227,3 +288,8 @@ class S3_Bucket_Key(S3_Bucket):
             extra_args=extra_args,
             transfer_config=transfer_config,
         )
+
+    def get_object(self, key: Union[str, PurePosixPath] = None, version_id=None):
+        if key is None:
+            key = self.key
+        return super().get_object(key=key)

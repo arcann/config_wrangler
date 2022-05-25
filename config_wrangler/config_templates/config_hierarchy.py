@@ -1,4 +1,4 @@
-from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict
+from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Union
 
 from pydantic import PrivateAttr, BaseModel, MissingError, PydanticValueError, ValidationError
 
@@ -15,6 +15,9 @@ class BadValueError(PydanticValueError):
 
     def __init__(self, original: PydanticValueError, value_str: str) -> None:
         super().__init__(original=original, value_str=value_str)
+
+
+private_attrs = ('_root_config', '_parents', '_name_map')
 
 
 class ConfigHierarchy(BaseModel):
@@ -36,7 +39,14 @@ class ConfigHierarchy(BaseModel):
         Uses something other than `self` the first arg to allow "self" as a settable attribute
         """
         try:
+            private_holding = dict()
+            for attr in private_attrs:
+                if attr in data:
+                    private_holding[attr] = data[attr]
+                    del data[attr]
             super().__init__(**data)
+            for attr, attr_value in private_holding.items():
+                setattr(__pydantic_self__, attr, attr_value)
         except ValidationError as e:
             # Change missing sections errors to show that and not missing field
             for err_wrapper in e.raw_errors:
@@ -70,6 +80,36 @@ class ConfigHierarchy(BaseModel):
                         except KeyError:
                             pass
             raise e
+
+    def _private_attr_dict(self) -> dict:
+        return {
+            attr: getattr(self, attr, None) for attr in private_attrs
+        }
+
+    def dict(
+            self,
+            *,
+            include: Union['AbstractSetIntStr', 'MappingIntStrAny'] = None,
+            exclude: Union['AbstractSetIntStr', 'MappingIntStrAny'] = None,
+            by_alias: bool = False,
+            skip_defaults: bool = None,
+            exclude_unset: bool = False,
+            exclude_defaults: bool = False,
+            exclude_none: bool = False,
+            exclude_private: bool = False,
+    ) -> 'DictStrAny':
+        d = super().dict(
+            include=include,
+            exclude=exclude,
+            by_alias=by_alias,
+            skip_defaults=skip_defaults,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+        )
+        if not exclude_private:
+            d.update(**self._private_attr_dict())
+        return d
 
     def full_item_name(self, item_name: str = None, delimiter: str = ' -> '):
         try:
@@ -126,3 +166,13 @@ class ConfigHierarchy(BaseModel):
     def set_as_child(self, name: str, otherConfigItem: 'ConfigHierarchy'):
         otherConfigItem._parents = self._parents + [name]
         otherConfigItem._root_config = self._root_config
+
+    def get_copy(self, copied_by: str = 'get_copy') -> 'ConfigHierarchy':
+        new_instance = self.copy(deep=False)
+        try:
+            self.set_as_child(copied_by, new_instance)
+        except AttributeError:
+            # Make the copy it's own root
+            new_instance._root_config = new_instance
+            new_instance._parents = []
+        return new_instance
