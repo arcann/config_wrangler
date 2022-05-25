@@ -123,6 +123,7 @@ class SQLAlchemyDatabase(Credentials):
             return f"{self.dialect}+{self.driver}"
 
     def get_uri(self) -> URL:
+        user_id = self.user_id
         password = self.get_password()
         if self.use_get_cluster_credentials:
             if self.aws_access_key_id is None:
@@ -131,14 +132,13 @@ class SQLAlchemyDatabase(Credentials):
                 self.aws_secret_access_key = password
 
             if self.rs_db_user_id is None:
-                raise ValueError(f'rs_db_user_id required for {self.__class__.__name__} {self.host} with use_get_cluster_credentials = True.')
+                raise ValueError(
+                    f'rs_db_user_id required for {self.__class__.__name__} {self.host} '
+                    f'with use_get_cluster_credentials = True.'
+                )
 
             credentials = self.get_cluster_credentials()
-            # Overwrite the access key & secret key with the temp DB user id and password
-            # Note: These go into the URL string so they need quote_plus for any special chars
-            # self.user_id = quote_plus(credentials['DbUser'])
-            # self.password = SecretStr(quote_plus(credentials['DbPassword']))
-            self.user_id = credentials['DbUser']
+            user_id = credentials['DbUser']
             password = credentials['DbPassword']
             # TODO: save credentials[''Expiration'] for use as engine.next_get_cluster_credentials
 
@@ -152,7 +152,7 @@ class SQLAlchemyDatabase(Credentials):
             drivername=self._get_connector(),
             host=self.host,
             port=self.port,
-            username=self.user_id,
+            username=user_id,
             password=password,
             database=self.database_name,
         )

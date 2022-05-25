@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
 class S3_Bucket(AWS_Session):
     bucket_name: str
-    region_name: str = None
 
     _service: str = PrivateAttr(default='s3')
 

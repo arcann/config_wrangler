@@ -1,9 +1,7 @@
-import inspect
 import os
 import typing
 import unittest
 from datetime import date, time, datetime
-from pathlib import Path
 from unittest import mock
 
 import pydantic
@@ -222,7 +220,14 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         with self.assertRaises(pydantic.error_wrappers.ValidationError):
             _ = ConfigToTestWith(
                 file_name='simple_example_no_pw.ini',
-                start_path=os.path.join(self.get_test_files_path())
+                start_path=self.get_test_files_path()
+            )
+
+    def test_missing_section(self):
+        with self.assertRaises(pydantic.error_wrappers.ValidationError):
+            _ = ConfigToTestWith(
+                file_name='simple_example_no_pw.ini',
+                start_path=self.get_test_files_path()
             )
 
     def test_read_keepass_good(self):
@@ -235,7 +240,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
-                start_path=os.path.join(self.get_test_files_path())
+                start_path=self.get_test_files_path()
             )
             config.keepass.database_path = os.path.join(self.get_test_files_path(),  'keepass_db.kdbx')
             self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
@@ -252,20 +257,41 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
     def test_read_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
             _ = ConfigWithKeypass(
-                file_name='simple_example_keepass_bad1.ini',
-                start_path=os.path.join(self.get_test_files_path())
+                file_name='simple_example_keepass_bad_missing.ini',
+                start_path=self.get_test_files_path()
             )
+        exc_str = str(raises_cm.exception)
+        print("Exception str")
+        print(exc_str)
+        self.assertIn('Section required', exc_str)
+        self.assertIn('test_settings', exc_str)
+        self.assertIn('keepass', exc_str)
+        self.assertIn('database', exc_str)
+
+    def test_read_keepass_bad_values(self):
+        os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
+        with self.assertRaises(ValueError) as raises_cm:
+            _ = ConfigWithKeypass(
+                file_name='simple_example_keepass_bad_values.ini',
+                start_path=self.get_test_files_path()
+            )
+        exc_str = str(raises_cm.exception)
+        print("Exception str")
+        print(exc_str)
+        self.assertIn('NOT_AN_INT', exc_str)
+        self.assertIn('accidental', exc_str)
 
     def test_read_keepass_bad2(self):
         with self.assertRaises(ValueError) as raises_cm:
             config = ConfigWithBadKeypass(
                 file_name='simple_example_keepass_good.ini',
-                start_path=os.path.join(self.get_test_files_path())
+                start_path=self.get_test_files_path()
             )
             config.target_database.get_password()
-        self.assertIn("'keepass' does not appear to be valid",
-                      str(raises_cm.exception)
-                      )
+        exc_str = str(raises_cm.exception)
+        print("Exception str")
+        print(exc_str)
+        self.assertIn("'keepass' does not appear to be valid",  exc_str)
 
     def test_read_keepass_bad_group(self):
         try:
@@ -274,15 +300,18 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
-                start_path=os.path.join(self.get_test_files_path())
+                start_path=self.get_test_files_path()
             )
             config.keepass.database_path = os.path.join(self.get_test_files_path(), 'keepass_db.kdbx')
 
             config.target_database.keepass_group = 'bad'
-            with self.assertRaises(ValueError) as raised:
+            with self.assertRaises(ValueError) as raises_cm:
                 config.target_database.get_password()
-            self.assertIn("group 'bad'", str(raised.exception))
-            self.assertIn("not found", str(raised.exception))
+            exc_str = str(raises_cm.exception)
+            print("Exception str")
+            print(exc_str)
+            self.assertIn("group 'bad'", exc_str)
+            self.assertIn("not found", exc_str)
 
         except ImportError:
             self.skipTest(f"Test requires pykeepass")
@@ -294,15 +323,18 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
                 file_name='simple_example_keepass_good.ini',
-                start_path=os.path.join(self.get_test_files_path())
+                start_path=self.get_test_files_path()
             )
             config.keepass.database_path = os.path.join(self.get_test_files_path(), 'keepass_db.kdbx')
 
             config.target_database.user_id = 'bad'
-            with self.assertRaises(ValueError) as raised:
+            with self.assertRaises(ValueError) as raises_cm:
                 config.target_database.get_password()
-            self.assertIn("does not have entry for", str(raised.exception))
-            self.assertIn("'bad'", str(raised.exception))
+            exc_str = str(raises_cm.exception)
+            print("Exception str")
+            print(exc_str)
+            self.assertIn("does not have entry for", exc_str)
+            self.assertIn("'bad'", exc_str)
 
         except ImportError:
             self.skipTest(f"Test requires pykeepass")
@@ -320,7 +352,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
                 keyring.set_password('s3', 'python_unittester_01', password)
             config = ConfigToTestWith(
                 file_name='simple_example_keyring.ini',
-                start_path=os.path.join(self.get_test_files_path())
+                start_path=self.get_test_files_path()
             )
             self.assertEqual(config.target_database.get_password(), password)
         except (ValueError, ImportError) as e:

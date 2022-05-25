@@ -1,9 +1,20 @@
-from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Type
+from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict
 
-from pydantic import PrivateAttr, BaseModel
+from pydantic import PrivateAttr, BaseModel, MissingError, PydanticValueError, ValidationError
 
 if TYPE_CHECKING:
     from config_wrangler.config_from_loaders import ConfigFromLoaders
+
+
+class SectionMissingError(PydanticValueError):
+    msg_template = 'Section required'
+
+
+class BadValueError(PydanticValueError):
+    msg_template = '{original}. value_provided = {value_str}'
+
+    def __init__(self, original: PydanticValueError, value_str: str) -> None:
+        super().__init__(original=original, value_str=value_str)
 
 
 class ConfigHierarchy(BaseModel):
@@ -15,6 +26,7 @@ class ConfigHierarchy(BaseModel):
     _name_map: Dict[str, str] = PrivateAttr(default={})
 
     # noinspection PyMethodParameters
+    # noinspection PyProtectedMember
     def __init__(__pydantic_self__, **data: Any) -> None:
         """
         Create a new model by parsing and validating input data from keyword arguments.
@@ -23,7 +35,41 @@ class ConfigHierarchy(BaseModel):
 
         Uses something other than `self` the first arg to allow "self" as a settable attribute
         """
-        super().__init__(**data)
+        try:
+            super().__init__(**data)
+        except ValidationError as e:
+            # Change missing sections errors to show that and not missing field
+            for err_wrapper in e.raw_errors:
+                original_exc = err_wrapper.exc
+                if isinstance(original_exc, MissingError):
+                    field_name = err_wrapper._loc
+                    field = e.model.__fields__[field_name]
+                    if hasattr(field.type_, '__fields__'):
+                        err_wrapper.exc = SectionMissingError(
+                            exc=err_wrapper.exc,
+                            _loc=err_wrapper._loc,
+                        )
+                else:
+                    if isinstance(original_exc, ValidationError):
+                        pass
+                    elif not isinstance(original_exc, BadValueError):
+                        # Change the exception to one that shows the value, if we can get it
+                        try:
+                            value_limit = 30
+                            value = str(data[err_wrapper._loc])
+                            if len(value) <= value_limit:
+                                value_str = value
+                            else:
+                                value_str = f"{value[:value_limit]}...value truncated"
+                            value_str = value_str.replace('\n', '\\n')
+
+                            err_wrapper.exc = BadValueError(
+                                original=original_exc,
+                                value_str=value_str
+                            )
+                        except KeyError:
+                            pass
+            raise e
 
     def full_item_name(self, item_name: str = None, delimiter: str = ' -> '):
         try:
