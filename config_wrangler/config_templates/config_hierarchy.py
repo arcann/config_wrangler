@@ -86,29 +86,16 @@ class ConfigHierarchy(BaseModel):
             attr: getattr(self, attr, None) for attr in private_attrs
         }
 
-    def dict(
+    def _dict_for_init(
             self,
-            *,
-            include: Union['AbstractSetIntStr', 'MappingIntStrAny'] = None,
             exclude: Union['AbstractSetIntStr', 'MappingIntStrAny'] = None,
-            by_alias: bool = False,
-            skip_defaults: bool = None,
-            exclude_unset: bool = False,
-            exclude_defaults: bool = False,
-            exclude_none: bool = False,
-            exclude_private: bool = False,
     ) -> 'DictStrAny':
-        d = super().dict(
-            include=include,
-            exclude=exclude,
-            by_alias=by_alias,
-            skip_defaults=skip_defaults,
-            exclude_unset=exclude_unset,
-            exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none,
-        )
-        if not exclude_private:
-            d.update(**self._private_attr_dict())
+        d = dict(self.__dict__)
+        d.update(**self._private_attr_dict())
+        if exclude is not None:
+            for exclude_attr in exclude:
+                if exclude_attr in d:
+                    del d[exclude]
         return d
 
     def full_item_name(self, item_name: str = None, delimiter: str = ' -> '):

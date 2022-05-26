@@ -102,14 +102,14 @@ class S3_Bucket(AWS_Session):
     def nav_to_key(self, key) -> 'S3_Bucket_Key':
         return S3_Bucket_Key(
             key=key,
-            **self.dict(exclude={'key'})
+            **self._dict_for_init(exclude={'key'})
         )
 
     def nav_to_folder(self, folder) -> 'S3_Bucket_Folder':
         return S3_Bucket_Folder(
             folder=folder,
             **self._private_attr_dict(),
-            **self.dict(exclude={'folder'})
+            **self._dict_for_init(exclude={'folder'})
         )
 
     def __truediv__(self, key) -> Union['S3_Bucket_Key', 'S3_Bucket_Folder']:
@@ -169,7 +169,7 @@ class S3_Bucket_Folder(S3_Bucket):
     def nav_to_file(self, file_name) -> 'S3_Bucket_Folder_File':
         new_folder_file = S3_Bucket_Folder_File(
             file_name=file_name,
-            **self.dict(exclude={'file_name'})
+            **self._dict_for_init(exclude={'file_name'})
         )
         new_folder_file.file_name = file_name
         return new_folder_file

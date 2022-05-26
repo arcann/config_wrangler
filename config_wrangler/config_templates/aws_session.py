@@ -3,7 +3,6 @@ from typing import *
 from pydantic import PrivateAttr
 
 
-
 try:
     import boto3
 except ImportError:
@@ -67,7 +66,7 @@ class AWS_Session(Credentials):
 
         return S3_Bucket(
             bucket_name=bucket_name,
-            **self.dict()
+            **self._dict_for_init()
         )
 
     @staticmethod
