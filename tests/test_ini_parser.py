@@ -1,3 +1,4 @@
+import json
 import os
 import typing
 import unittest
@@ -355,6 +356,12 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
                 start_path=self.get_test_files_path()
             )
             self.assertEqual(config.target_database.get_password(), password)
+
+            d = config.dict()
+            self.assertEqual(d['test_section']['my_url'], config.test_section.my_url)
+            json_str = config.json()
+            json_d = json.loads(json_str)
+            self.assertEqual(json_d['test_section']['my_int'], config.test_section.my_int)
         except (ValueError, ImportError) as e:
             if "No module named 'keyring'" in str(e):
                 if keyring is None:

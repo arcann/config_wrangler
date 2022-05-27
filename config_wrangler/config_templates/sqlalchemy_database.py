@@ -1,16 +1,25 @@
 import logging
-import typing
-from datetime import datetime, timedelta
+from typing import *
+from datetime import datetime, timedelta, timezone
 
 from pydantic import PrivateAttr, root_validator
-from sqlalchemy.engine import Engine
-from sqlalchemy.sql.schema import DEFAULT_NAMING_CONVENTION
+
 
 try:
+    # noinspection PyPackageRequirements
+    from sqlalchemy.engine import Engine
+    # noinspection PyPackageRequirements
+    from sqlalchemy.sql.schema import DEFAULT_NAMING_CONVENTION
+    # noinspection PyPackageRequirements
     from sqlalchemy import create_engine, event, MetaData
+    # noinspection PyPackageRequirements
     from sqlalchemy.engine.url import URL
+    # noinspection PyPackageRequirements
     from sqlalchemy.orm import Session
+    # noinspection PyPackageRequirements
     from sqlalchemy.pool import QueuePool, NullPool
+    # noinspection PyPackageRequirements
+    from sqlalchemy.exc import SQLAlchemyError
 except ImportError:
     raise ImportError("SQLAlchemyDatabase requires sqlalchemy to be installed")
 
@@ -31,7 +40,7 @@ class SQLAlchemyDatabase(Credentials):
     aws_secret_access_key: str = None
     rs_db_user_id: str = None
     rs_duration_seconds: str = 3600
-    create_engine_args: typing.Dict[str, typing.Any] = {}
+    create_engine_args: Dict[str, Any] = {}
     arraysize: int = 5000  # Only used for Oracle
     encoding: str = None
     poolclass: str = None
@@ -40,6 +49,7 @@ class SQLAlchemyDatabase(Credentials):
     _engine = PrivateAttr(default=None)
     _sqlite_connection = PrivateAttr(default=None)
     _rs_client = PrivateAttr(default=None)
+    _rs_credential_expiry: datetime = PrivateAttr(default=None)
 
     # Values to hide from config exports
     _private_value_atts = PrivateAttr(default={'password', 'aws_secret_access_key'})
@@ -98,7 +108,11 @@ class SQLAlchemyDatabase(Credentials):
                 # noinspection PyTypeChecker
                 return None
 
-    def get_cluster_credentials(self):
+    @staticmethod
+    def _now():
+        return datetime.now(timezone.utc)
+
+    def get_cluster_credentials(self) -> Tuple[str, str]:
         if self._rs_client is None:
             import boto3
 
@@ -109,12 +123,26 @@ class SQLAlchemyDatabase(Credentials):
                 aws_secret_access_key=self.aws_secret_access_key,
                 aws_session_token=None,
             )
-        return self._rs_client.get_cluster_credentials(
+        new_credentials = self._rs_client.get_cluster_credentials(
                 DbUser=self.rs_db_user_id,
                 DbName=self.database_name,
                 DurationSeconds=self.rs_duration_seconds,
                 ClusterIdentifier=self.rs_cluster_id
             )
+        rs_new_credentials_timedelta = timedelta(seconds=self.rs_new_credentials_seconds)
+        self._rs_credential_expiry = self._now() + rs_new_credentials_timedelta
+        if 'DbUser' not in new_credentials or 'DbPassword' not in new_credentials:
+            raise SQLAlchemyError(f'Invalid response from get_cluster_credentials got {new_credentials}')
+        if 'Expiration' in new_credentials:
+            # Expire when redshift said or sooner as specified by rs_new_credentials_seconds
+            server_expiry = new_credentials['Expiration']
+            if server_expiry.tzinfo is None:
+                # Moto seems to return naive datetime in local tz.
+                # Boto3 returns tz aware datetime
+                server_expiry = server_expiry.astimezone(tz=None)
+            self._rs_credential_expiry = min(self._rs_credential_expiry, server_expiry)
+
+        return new_credentials['DbUser'], new_credentials['DbPassword']
 
     def _get_connector(self) -> str:
         if self.driver is None:
@@ -137,10 +165,7 @@ class SQLAlchemyDatabase(Credentials):
                     f'with use_get_cluster_credentials = True.'
                 )
 
-            credentials = self.get_cluster_credentials()
-            user_id = credentials['DbUser']
-            password = credentials['DbPassword']
-            # TODO: save credentials[''Expiration'] for use as engine.next_get_cluster_credentials
+            user_id, password = self.get_cluster_credentials()
 
         if self.dialect in {'sqlite'}:
             # noinspection PyTypeChecker
@@ -176,10 +201,6 @@ class SQLAlchemyDatabase(Credentials):
 
             self._engine = create_engine(self.get_uri(), **kwargs)
 
-            rs_new_credentials_timedelta = timedelta(seconds=self.rs_new_credentials_seconds)
-
-            self._engine.next_get_cluster_credentials = datetime.now() + rs_new_credentials_timedelta
-
             # Make an event listener so we can get new RS credentials if needed
             @event.listens_for(self._engine, 'do_connect', named=True)
             def engine_do_connect(**kw):
@@ -189,13 +210,11 @@ class SQLAlchemyDatabase(Credentials):
                 # from bi_etl.utility import dict_to_str
                 # print(dict_to_str(kw))
                 if self.use_get_cluster_credentials:
-                    if datetime.now() > self._engine.next_get_cluster_credentials:
+                    if self._now() >= self._rs_credential_expiry:
                         logging.info('Getting new Redshift cluster credentials')
-                        new_credentials = self._rs_client.get_cluster_credentials()
-                        # Note: Since we are not building a URL here we don't need/want to use quote_plus
-                        kw['cparams']['user'] = new_credentials['DbUser']
-                        kw['cparams']['password'] = new_credentials['DbPassword']
-                        self._engine.next_get_cluster_credentials = datetime.now() + rs_new_credentials_timedelta
+                        db_user, password = self.get_cluster_credentials()
+                        kw['cparams']['user'] = db_user
+                        kw['cparams']['password'] = password
 
                 # Return None to allow control to pass to the next event handler and ultimately
                 # to allow the dialect to connect normally, given the updated arguments.
