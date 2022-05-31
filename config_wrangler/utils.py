@@ -3,13 +3,14 @@ import inspect
 import json
 import logging
 import re
-import typing
+from typing import *
 from datetime import timezone, datetime
 
 from pydantic import BaseModel
-from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE, \
-    SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET, SHAPE_DICT, SHAPE_DEFAULTDICT, Field, ModelField
-from pydantic.utils import lenient_issubclass
+from pydantic.fields import (
+    SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE,
+    SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET, SHAPE_DICT, SHAPE_DEFAULTDICT, Field, ModelField,
+)
 
 from config_wrangler.config_exception import ConfigError
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
@@ -32,68 +33,94 @@ class TZFormatter(logging.Formatter):
         return result
 
 
-def merge_configs(child: typing.MutableMapping, parent: typing.MutableMapping) -> None:
+def merge_configs(child: MutableMapping, parent: MutableMapping) -> None:
     for section in parent:
         if section not in child:
             child[section] = parent[section]
         else:
-            if isinstance(child[section], typing.MutableMapping):
+            if isinstance(child[section], MutableMapping):
                 merge_configs(child[section], parent[section])
             else:
                 pass
 
 
-def resolve_variable(root_config_data: typing.MutableMapping, variable_name: str, default=None, part_delimiter=':') -> typing.Any:
+def resolve_variable(root_config_data: MutableMapping, variable_name: str, part_delimiter=':') -> Any:
     variable_name_parts = variable_name.split(part_delimiter)
     result = root_config_data
     for part in variable_name_parts:
         if part in result:
             result = result[part]
         else:
-            return default
+            raise ValueError(f"<<{part} NOT FOUND when resolving {variable_name_parts}>>")
     return result
 
 
 _interpolation_re = re.compile(r"\${([^}]+)}")
 
 
-def interpolate_values(container: typing.MutableMapping, root_config_data: typing.MutableMapping):
+def interpolate_values(container: MutableMapping, root_config_data: MutableMapping) -> List[Tuple[str, str]]:
+    errors = []
     for section in container:
         value = container[section]
-        if isinstance(value, typing.MutableMapping):
-            interpolate_values(value, root_config_data=root_config_data)
+        if isinstance(value, MutableMapping):
+            sub_errors = interpolate_values(value, root_config_data=root_config_data)
+            errors.extend(sub_errors)
         elif isinstance(value, str):
             if '$' in value:
-                variables_cnt = 0
-                result_values = []
-                next_start = 0
-                for variable_found in _interpolation_re.finditer(value):
-                    variables_cnt += 1
-                    variable_name = variable_found.groups()[0]
-                    variable_text = f"${{{variable_name}}}"
-                    var_start, var_end = variable_found.span()
+                depth = 0
+                done = False
+                new_value = value
+                while not done:
+                    done = True
+                    depth += 1
+                    variables_cnt = 0
+                    result_values = []
+                    next_start = 0
+                    for variable_found in _interpolation_re.finditer(new_value):
+                        variables_cnt += 1
+                        variable_name = variable_found.groups()[0]
+                        var_start, var_end = variable_found.span()
 
-                    if ':' in variable_name:
-                        variable_replacement = resolve_variable(
-                            root_config_data, variable_name, default=variable_text, part_delimiter=':'
-                        )
-                    elif '.' in variable_name:
-                        variable_replacement = resolve_variable(
-                            root_config_data, variable_name, default=variable_text, part_delimiter='.'
-                        )
-                    else:
-                        variable_replacement = container.get(variable_name, default=variable_text)
+                        part_delimiter = None
+                        if ':' in variable_name:
+                            part_delimiter = ':'
 
-                    result_values.append(value[next_start:var_start])
-                    result_values.append(variable_replacement)
-                    next_start = var_end + 1
-                if variables_cnt > 0:
-                    if next_start < len(value):
-                        result_values.append(value[next_start:])
-                    container[section] = ''.join(result_values)
+                        elif '.' in variable_name:
+                            part_delimiter = '.'
+
+                        variable_replacement = 'ERROR'
+                        if part_delimiter is not None:
+                            try:
+                                variable_replacement = resolve_variable(
+                                    root_config_data,
+                                    variable_name,
+                                    part_delimiter=part_delimiter,
+                                )
+                            except ValueError as e:
+                                errors.append((section, str(e),))
+                        else:
+                            try:
+                                variable_replacement = container[variable_name]
+                            except KeyError:
+                                errors.append((section, f"<<{variable_name} NOT FOUND>>",))
+
+                        result_values.append(new_value[next_start:var_start])
+                        result_values.append(variable_replacement)
+                        next_start = var_end
+                    if variables_cnt > 0:
+                        if next_start < len(new_value):
+                            result_values.append(new_value[next_start:])
+                        new_value = ''.join(result_values)
+
+                        if depth < 50:
+                            done = False
+                        else:
+                            raise ValueError(f"Interpolation recursion depth limit reached on value {value} ended with {new_value}")
+                container[section] = new_value
+    return errors
 
 
-def parse_as_literal_or_json(value: str) -> typing.Any:
+def parse_as_literal_or_json(value: str) -> Any:
     try:
         return ast.literal_eval(value)
     except (ValueError, SyntaxError) as el:
@@ -105,7 +132,7 @@ def parse_as_literal_or_json(value: str) -> typing.Any:
             )
 
 
-def parse_delimited_list(field: Field, value: str) -> typing.Sequence:
+def parse_delimited_list(field: Field, value: str) -> Sequence:
     value = value.strip()
     if len(value) == 0:
         return []
@@ -131,7 +158,7 @@ def parse_delimited_list(field: Field, value: str) -> typing.Sequence:
     return result
 
 
-def full_name(parents: typing.List[str], field_name: str):
+def full_name(parents: List[str], field_name: str):
     return '.'.join(parents + [field_name])
 
 
@@ -143,11 +170,11 @@ def inherit_fill(parent_config, child_config):
 
 def find_referenced_section(
         field: ModelField,
-        parents: typing.List[str],
-        section_name: typing.Union[str, typing.MutableMapping],
-        current_dict: typing.MutableMapping,
-        root_dict: typing.MutableMapping
-) -> typing.MutableMapping:
+        parents: List[str],
+        section_name: Union[str, MutableMapping],
+        current_dict: MutableMapping,
+        root_dict: MutableMapping
+) -> MutableMapping:
     inherit = field.field_info.extra.get('inherit', False)
     if isinstance(section_name, str):
         if section_name in root_dict:
@@ -171,9 +198,9 @@ def match_config_data_to_field(
         field: ModelField,
         field_value: object,
         create_from_section_names: bool,
-        parent_container: typing.MutableMapping,
-        root_config_data: typing.MutableMapping,
-        parents: typing.List[str],
+        parent_container: MutableMapping,
+        root_config_data: MutableMapping,
+        parents: List[str],
 ):
     if field.shape == SHAPE_SINGLETON and field.type_ not in {list, tuple, dict, set, frozenset}:
         if create_from_section_names:
@@ -277,8 +304,8 @@ def match_config_data_to_field(
 
 def match_config_data_to_model(
         model: BaseModel,
-        config_data: typing.MutableMapping,
-        root_config_data: typing.MutableMapping = None,
+        config_data: MutableMapping,
+        root_config_data: MutableMapping = None,
         parents=None
 ):
     if parents is None:
@@ -333,8 +360,8 @@ def match_config_data_to_model(
 
 def match_config_data_to_field_or_submodel(
         field: ModelField,
-        parent_container: typing.MutableMapping,
-        root_config_data: typing.MutableMapping = None,
+        parent_container: MutableMapping,
+        root_config_data: MutableMapping = None,
         parents=None
 ):
     create_from_section_names = field.field_info.extra.get('create_from_section_names', False)

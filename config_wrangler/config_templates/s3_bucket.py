@@ -56,7 +56,11 @@ class S3_Bucket(AWS_Session):
             local_filename: Union[str, Path],
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
+            create_parents: bool = True,
     ):
+        if create_parents:
+            local_path = Path(local_filename)
+            local_path.parent.mkdir(parents=True, exist_ok=True)
         self.resource.Bucket(self.bucket_name).download_file(
             Key=str(key),
             Filename=str(local_filename),
@@ -152,6 +156,7 @@ class S3_Bucket_Folder(S3_Bucket):
             local_filename: Union[str, Path],
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
+            create_parents: bool = True,
     ):
         full_key = PurePosixPath(self.folder, key_suffix)
         super().download_file(
@@ -159,6 +164,7 @@ class S3_Bucket_Folder(S3_Bucket):
             local_filename=local_filename,
             extra_args=extra_args,
             transfer_config=transfer_config,
+            create_parents=create_parents,
         )
 
     def nav_to_folder(self, folder_key) -> 'S3_Bucket_Folder':
@@ -281,12 +287,14 @@ class S3_Bucket_Key(S3_Bucket):
         local_filename: Union[str, PurePosixPath],
         extra_args: Optional[dict] = None,
         transfer_config: Optional[TransferConfig] = None,
+        create_parents: bool = True,
     ):
         super().download_file(
             local_filename=local_filename,
             key=self.key,
             extra_args=extra_args,
             transfer_config=transfer_config,
+            create_parents=create_parents,
         )
 
     def get_object(self, key: Union[str, PurePosixPath] = None, version_id=None):

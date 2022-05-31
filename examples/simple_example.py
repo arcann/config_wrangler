@@ -46,6 +46,7 @@ class TestSection(ConfigHierarchy):
     my_time: time
     my_datetime: datetime
     my_url: AnyHttpUrl
+    double_interpolate: str
     my_environment: Environment
 
 

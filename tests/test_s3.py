@@ -27,17 +27,17 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             Bucket=self.bucket3_name,
         )
 
-        self.example1_key = 'simple_example.ini'
+        self.example1_key = 'test_good.ini'
         self.mock_client.upload_file(
             Bucket=self.bucket1_name,
             Key=self.example1_key,
-            Filename=str(self.get_test_files_path() / 'simple_example.ini')
+            Filename=str(self.get_test_files_path() / 'test_good.ini')
         )
         self.example2_key = 'folder1/file.txt'
         self.mock_client.upload_file(
             Bucket=self.bucket1_name,
             Key=self.example2_key,
-            Filename=str(self.get_test_files_path() / 'simple_example.ini')
+            Filename=str(self.get_test_files_path() / 'test_good.ini')
         )
 
     def test_list_files(self):

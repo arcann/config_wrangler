@@ -15,6 +15,13 @@ from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatab
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
+class Environment(ConfigHierarchy):
+    name: str = Field(..., env='env_name')
+    # Path types are not used for test since we don't want to need specific path to exists
+    temp_data_dir: str
+    source_data_dir: str
+
+
 class TestSection(ConfigHierarchy):
     my_int: int
     my_float: float
@@ -41,6 +48,12 @@ class TestSection(ConfigHierarchy):
     my_time: time
     my_datetime: datetime
     my_url: AnyHttpUrl
+    double_interpolate: str
+    triple_interpolate: str
+    a: str
+    b: str
+    c: str
+    my_environment: Environment
 
 
 class ConfigToTestWith(ConfigFromIniEnv):
@@ -66,7 +79,7 @@ class ConfigWithKeypass(ConfigToTestWith):
 
 
 class FakeKeepassConfig(ConfigHierarchy):
-    database_path: str
+    pass
 
 
 class ConfigWithBadKeypass(ConfigToTestWith):
@@ -180,54 +193,65 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         self.assertEqual(test_val, 'https://localhost:6553/')
         self.assertIsInstance(test_val, str)
 
+        self.assertEqual(config.test_section.double_interpolate, 'My DB is in ./example_db')
+
+        self.assertEqual(config.test_section.triple_interpolate, '--**++C++**--')
+
     def test_read_start_path(self):
         config = ConfigToTestWith(
-            file_name='simple_example.ini',
+            file_name='test_good.ini',
             start_path=self.get_test_files_path()
         )
         self._test_simple_example_config(config)
 
     def test_read_start_path_deeper_start(self):
         config = ConfigToTestWith(
-            file_name='simple_example.ini',
+            file_name='test_good.ini',
             start_path=os.path.join(self.get_test_files_path(), 'deeper_dir')
         )
         self._test_simple_example_config(config)
 
     def test_read_start_path_deeper_start_2(self):
         config = ConfigToTestWith(
-            file_name='simple_example.ini',
+            file_name='test_good.ini',
             start_path=os.path.join(self.get_test_files_path(), 'deeper_dir', 'deeper_does_not_exist')
         )
         self._test_simple_example_config(config)
 
     def test_read_cwd(self):
         with mock.patch("os.getcwd", return_value=self.get_test_files_path()) as mock_cwd:
-            config = ConfigToTestWith(file_name='simple_example.ini')
+            config = ConfigToTestWith(file_name='test_good.ini')
             self._test_simple_example_config(config)
             mock_cwd.assert_called()
 
     def test_read_cwd_deeper_start(self):
         with mock.patch("os.getcwd", return_value=os.path.join(self.get_test_files_path(), 'deeper_dir')) as mock_cwd:
-            config = ConfigToTestWith(file_name='simple_example.ini')
+            config = ConfigToTestWith(file_name='test_good.ini')
             self._test_simple_example_config(config)
             mock_cwd.assert_called()
 
     def test_does_not_exist(self):
         with self.assertRaises(FileNotFoundError):
-            _ = ConfigToTestWith(file_name='simple_example.ini')
+            _ = ConfigToTestWith(file_name='test_good.ini')
 
     def test_read_no_password(self):
         with self.assertRaises(pydantic.error_wrappers.ValidationError):
             _ = ConfigToTestWith(
-                file_name='simple_example_no_pw.ini',
+                file_name='test_no_pw.ini',
                 start_path=self.get_test_files_path()
             )
 
     def test_missing_section(self):
         with self.assertRaises(pydantic.error_wrappers.ValidationError):
             _ = ConfigToTestWith(
-                file_name='simple_example_no_pw.ini',
+                file_name='test_no_pw.ini',
+                start_path=self.get_test_files_path()
+            )
+
+    def test_bad_interpolations(self):
+        with self.assertRaises(ValueError):
+            _ = ConfigToTestWith(
+                file_name='test_bad_interpolations.ini',
                 start_path=self.get_test_files_path()
             )
 
@@ -240,7 +264,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
-                file_name='simple_example_keepass_good.ini',
+                file_name='test_keepass_good.ini',
                 start_path=self.get_test_files_path()
             )
             config.keepass.database_path = os.path.join(self.get_test_files_path(),  'keepass_db.kdbx')
@@ -258,7 +282,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
     def test_read_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
             _ = ConfigWithKeypass(
-                file_name='simple_example_keepass_bad_missing.ini',
+                file_name='test_keepass_bad_missing.ini',
                 start_path=self.get_test_files_path()
             )
         exc_str = str(raises_cm.exception)
@@ -273,7 +297,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
         with self.assertRaises(ValueError) as raises_cm:
             _ = ConfigWithKeypass(
-                file_name='simple_example_keepass_bad_values.ini',
+                file_name='test_keepass_bad_values.ini',
                 start_path=self.get_test_files_path()
             )
         exc_str = str(raises_cm.exception)
@@ -283,9 +307,10 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         self.assertIn('accidental', exc_str)
 
     def test_read_keepass_bad2(self):
+        os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
         with self.assertRaises(ValueError) as raises_cm:
             config = ConfigWithBadKeypass(
-                file_name='simple_example_keepass_good.ini',
+                file_name='test_keepass_bad_missing_entirely.ini',
                 start_path=self.get_test_files_path()
             )
             config.target_database.get_password()
@@ -300,7 +325,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
 
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
-                file_name='simple_example_keepass_good.ini',
+                file_name='test_keepass_good.ini',
                 start_path=self.get_test_files_path()
             )
             config.keepass.database_path = os.path.join(self.get_test_files_path(), 'keepass_db.kdbx')
@@ -323,7 +348,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
 
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
-                file_name='simple_example_keepass_good.ini',
+                file_name='test_keepass_good.ini',
                 start_path=self.get_test_files_path()
             )
             config.keepass.database_path = os.path.join(self.get_test_files_path(), 'keepass_db.kdbx')
@@ -352,7 +377,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
                 # If keyring is actually installed, use it to set the password
                 keyring.set_password('example_section', 'python_unittester_01', password)
             config = ConfigToTestWith(
-                file_name='simple_example_keyring.ini',
+                file_name='test_keyring.ini',
                 start_path=self.get_test_files_path()
             )
             self.assertEqual(config.target_database.get_password(), password)

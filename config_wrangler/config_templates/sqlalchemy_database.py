@@ -173,14 +173,24 @@ class SQLAlchemyDatabase(Credentials):
             # noinspection PyTypeChecker
             self.user_id = None
 
-        return URL(
-            drivername=self._get_connector(),
-            host=self.host,
-            port=self.port,
-            username=user_id,
-            password=password,
-            database=self.database_name,
-        )
+        try:
+            return URL.create(
+                drivername=self._get_connector(),
+                host=self.host,
+                port=self.port,
+                username=user_id,
+                password=password,
+                database=self.database_name,
+            )
+        except AttributeError:
+            return URL(
+                drivername=self._get_connector(),
+                host=self.host,
+                port=self.port,
+                username=user_id,
+                password=password,
+                database=self.database_name,
+            )
 
     def get_engine(self) -> Engine:
         if self._engine is None:

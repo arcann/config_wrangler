@@ -33,7 +33,20 @@ class ConfigFromLoaders(ConfigHierarchy):
             loader_config_data = loader.read_config_data(__pydantic_self__)
             merge_configs(config_data, loader_config_data)
         log.debug("Interpolating config macro references")
-        interpolate_values(config_data, config_data)
+        interpolate_errors = interpolate_values(config_data, config_data)
+        if len(interpolate_errors) > 0:
+            log = logging.getLogger(__name__)
+            log.error(f"{len(interpolate_errors)} Variable interpolation config errors found:")
+            errors_str_list = []
+            indent = ' ' * 3
+            for error in interpolate_errors:
+                error_msg = f"{indent}{error[0]}: {error[1]}"
+                log.error(error_msg)
+                errors_str_list.append(error_msg)
+
+            errors_str = f"\n".join(errors_str_list)
+            raise ValueError(f"Config Interpolation Errors (cnt={len(interpolate_errors)}). Errors=\n{indent}{errors_str}")
+
         log.debug("Translating config with translate_config_data method")
         config_data = __pydantic_self__.translate_config_data(config_data)
         log.debug(f"Calling pydantic __init__")
