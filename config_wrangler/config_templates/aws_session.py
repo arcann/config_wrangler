@@ -66,7 +66,7 @@ class AWS_Session(Credentials):
 
         return S3_Bucket(
             bucket_name=bucket_name,
-            **self._dict_for_init()
+            **self._dict_for_init(exclude={'bucket_name'})
         )
 
     @staticmethod

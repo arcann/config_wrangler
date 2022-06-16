@@ -29,7 +29,7 @@ class TomlConfigDataLoader(FileConfigDataLoader):
         self.toml = toml
 
     def _read_file(self, file_path: Path) -> typing.MutableMapping:
-        self.log.debug(f"Reading {file_path}")
+        self.log.info(f"Reading {file_path}")
         self.files_read.append(file_path)
         with file_path.open('rt', encoding='utf8') as toml_content:
             config_data = self.toml.load(toml_content)

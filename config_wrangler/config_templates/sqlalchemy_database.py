@@ -55,7 +55,7 @@ class SQLAlchemyDatabase(Credentials):
     _private_value_atts = PrivateAttr(default={'password', 'aws_secret_access_key'})
 
     def __repr__(self):
-        return f"SQLAlchemyDatabase({self.get_uri()})"
+        return Credentials.__repr__(self)
 
     def __str__(self):
         return str(self.get_uri())
@@ -152,12 +152,11 @@ class SQLAlchemyDatabase(Credentials):
 
     def get_uri(self) -> URL:
         user_id = self.user_id
-        password = self.get_password()
         if self.use_get_cluster_credentials:
             if self.aws_access_key_id is None:
                 self.aws_access_key_id = self.user_id
             if self.aws_secret_access_key is None:
-                self.aws_secret_access_key = password
+                self.aws_secret_access_key = self.get_password()
 
             if self.rs_db_user_id is None:
                 raise ValueError(
@@ -166,31 +165,37 @@ class SQLAlchemyDatabase(Credentials):
                 )
 
             user_id, password = self.get_cluster_credentials()
+        else:
+            # Will be set below
+            password = None
 
         if self.dialect in {'sqlite'}:
-            # noinspection PyTypeChecker
-            self.host = None
-            # noinspection PyTypeChecker
-            self.user_id = None
-
-        try:
             return URL.create(
                 drivername=self._get_connector(),
-                host=self.host,
-                port=self.port,
-                username=user_id,
-                password=password,
                 database=self.database_name,
             )
-        except AttributeError:
-            return URL(
-                drivername=self._get_connector(),
-                host=self.host,
-                port=self.port,
-                username=user_id,
-                password=password,
-                database=self.database_name,
-            )
+        else:
+            if not self.use_get_cluster_credentials:
+                password = self.get_password()
+
+            try:
+                return URL.create(
+                    drivername=self._get_connector(),
+                    host=self.host,
+                    port=self.port,
+                    username=user_id,
+                    password=password,
+                    database=self.database_name,
+                )
+            except AttributeError:
+                return URL(
+                    drivername=self._get_connector(),
+                    host=self.host,
+                    port=self.port,
+                    username=user_id,
+                    password=password,
+                    database=self.database_name,
+                )
 
     def get_engine(self) -> Engine:
         if self._engine is None:

@@ -1,3 +1,4 @@
+import logging
 import typing
 
 from config_wrangler.config_data_loaders.env_config_data_loader import EnvConfigDataLoader
@@ -11,11 +12,13 @@ class ConfigFromIniEnv(ConfigFromLoaders):
             __pydantic_self__,
             file_name: str = 'config.ini',
             start_path: typing.Optional[str] = None,
+            config_load_log_level: int = logging.INFO,
             **kwargs: typing.Dict[str, typing.Any]
     ) -> None:
         env_loader = EnvConfigDataLoader()
         ini_loader = IniConfigDataLoader(start_path=start_path, file_name=file_name)
         super().__init__(
             _config_data_loaders=[env_loader, ini_loader],
+            config_load_log_level=config_load_log_level,
             **kwargs
         )

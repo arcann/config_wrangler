@@ -2,7 +2,7 @@ from pathlib import PurePosixPath, Path
 from typing import *
 
 from boto3.s3.transfer import TransferConfig
-from pydantic import PrivateAttr
+from pydantic import PrivateAttr, validator
 
 from config_wrangler.config_templates.aws_session import AWS_Session
 
@@ -105,14 +105,13 @@ class S3_Bucket(AWS_Session):
 
     def nav_to_key(self, key) -> 'S3_Bucket_Key':
         return S3_Bucket_Key(
-            key=key,
+            key=str(key),
             **self._dict_for_init(exclude={'key'})
         )
 
     def nav_to_folder(self, folder) -> 'S3_Bucket_Folder':
         return S3_Bucket_Folder(
-            folder=folder,
-            **self._private_attr_dict(),
+            folder=str(folder),
             **self._dict_for_init(exclude={'folder'})
         )
 
@@ -128,6 +127,15 @@ class S3_Bucket_Folder(S3_Bucket):
         Represents a folder within an S3 bucket.
     """
     folder: str
+
+    @validator('folder')
+    def validate_folder(cls, v):
+        # Handle pathlib values
+        if not isinstance(v, str):
+            v = str(v)
+        if len(v) == 0:
+            raise ValueError(f"Zero length string not a valid folder")
+        return v
 
     def __str__(self):
         return f"s3://{self.bucket_name}/{self.folder}"
@@ -213,6 +221,15 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
     folder: str
     file_name: str
 
+    @validator('file_name')
+    def validate_file_name(cls, v):
+        # Handle pathlib values
+        if not isinstance(v, str):
+            v = str(v)
+        if len(v) == 0:
+            raise ValueError(f"Zero length string not a valid file_name")
+        return v
+
     def __str__(self):
         return f"s3://{self.bucket_name}/{self.folder}/{self.file_name}"
 
@@ -257,6 +274,15 @@ class S3_Bucket_Key(S3_Bucket):
     Similar to S3_Bucket_Folder_File but uses a single key instead of folder + file_name
     """
     key: str
+
+    @validator('key')
+    def validate_key(cls, v):
+        # Handle pathlib values
+        if not isinstance(v, str):
+            v = str(v)
+        if len(v) == 0:
+            raise ValueError(f"Zero length string not a valid key")
+        return v
 
     def __str__(self):
         return f"s3://{self.bucket_name}/{self.key}"

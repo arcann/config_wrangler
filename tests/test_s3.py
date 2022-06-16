@@ -83,7 +83,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
 
         root_folder = S3_Bucket_Folder(
             bucket_name=self.bucket1_name,
-            folder='',
+            folder='.',
             user_id='mock_user',
             raw_password='super secret password',
             password_source=PasswordSource.CONFIG_FILE,

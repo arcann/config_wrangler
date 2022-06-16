@@ -1,14 +1,16 @@
 import typing
 
+from auto_all import public
 from pydantic import PrivateAttr, root_validator
 
-from config_wrangler.config_types.path_types import PathExpandUser
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.credentials import Credentials, PasswordSource
+from config_wrangler.config_types.path_types import PathFindUpExpandUser
 
 
+@public
 class KeepassConfig(ConfigHierarchy):
-    database_path: PathExpandUser
+    database_path: PathFindUpExpandUser
     default_group: str = None
     password_source: PasswordSource = PasswordSource.KEYRING
     raw_password: str = None

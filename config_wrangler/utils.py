@@ -177,15 +177,20 @@ def find_referenced_section(
 ) -> MutableMapping:
     inherit = field.field_info.extra.get('inherit', False)
     if isinstance(section_name, str):
-        if section_name in root_dict:
-            if inherit:
-                inherit_fill(current_dict, root_dict[section_name])
-            section_value = root_dict[section_name]
-        elif section_name in current_dict:
-            if inherit:
-                inherit_fill(current_dict, current_dict[section_name])
-            section_value = current_dict[section_name]
-        else:
+        section_value = dict()
+        section_name_parts = section_name.split('.')
+        parts_used = []
+        for parts_to_use in range(len(section_name_parts), 0, -1):
+            section_name_2 = '.'.join(section_name_parts[:parts_to_use])
+            if section_name_2 in root_dict:
+                parts_used.append(tuple(section_name_2,))
+                inherit_fill(root_dict[section_name_2], section_value)
+            elif section_name_2 in current_dict:
+                parts_used.append(tuple(*parents, section_name_2,))
+                inherit_fill(current_dict[section_name_2], section_value)
+        if inherit:
+            inherit_fill(current_dict, section_value)
+        if len(parts_used) == 0:
             raise ConfigError(
                 f"{full_name(parents, field.alias)} refers to section {section_name} which does not exist."
             )
@@ -206,6 +211,7 @@ def match_config_data_to_field(
         if create_from_section_names:
             if not hasattr(field.type_, '__fields__'):
                 raise ValueError(f"{full_name(parents, field.alias)} has create_from_section_names but has no fields")
+            assert isinstance(field_value, str)
             section_value = find_referenced_section(
                 field=field,
                 parents=parents,

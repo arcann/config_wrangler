@@ -35,7 +35,7 @@ class Credentials(ConfigHierarchy):
         if self.password_source is None:
             try:
                 passwords_defaults = getattr(self._root_config, 'passwords')
-            except KeyError:
+            except AttributeError:
                 raise ValueError(
                     f"{self.full_item_name()} password_source not provided and 'passwords' section not found"
                 )

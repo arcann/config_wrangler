@@ -60,8 +60,7 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
                     raise ValueError(f"Found multiple matches for {parents} {field}.  They are: {possible_env_vars}")
                 elif len(possible_env_vars) == 1:
                     env_var = list(possible_env_vars)[0]
-                    # TODO: Find a way to log this later since logging is probably not setup yet
-                    self.log.debug(f"Read ENV {env_var} into {parents} {field}.")
+                    self.log.info(f"Read ENV {env_var} into {parents} {field}.")
                     env_val = env_vars[env_var]
 
             if field.is_complex():

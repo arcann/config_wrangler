@@ -1,9 +1,11 @@
-from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Union
+import collections.abc
+from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Union, Sequence
 
 from pydantic import PrivateAttr, BaseModel, MissingError, PydanticValueError, ValidationError
 
 if TYPE_CHECKING:
     from config_wrangler.config_from_loaders import ConfigFromLoaders
+    from pydantic.typing import AbstractSetIntStr, MappingIntStrAny, DictStrAny
 
 
 class SectionMissingError(PydanticValueError):
@@ -22,7 +24,7 @@ private_attrs = ('_root_config', '_parents', '_name_map')
 
 class ConfigHierarchy(BaseModel):
     """
-    NOTE: This class requires that the top of the hierarchy be an instance of ConfigFromLoaders
+    NOTE: This class requires that the top of the hierarchy be an instance of ConfigRoot
     """
     _root_config: 'ConfigFromLoaders' = PrivateAttr(default=None)
     _parents: List[str] = PrivateAttr()
@@ -48,8 +50,15 @@ class ConfigHierarchy(BaseModel):
             for attr, attr_value in private_holding.items():
                 setattr(__pydantic_self__, attr, attr_value)
         except ValidationError as e:
+            def flatten(errors: Sequence):
+                for error in errors:
+                    if isinstance(error, collections.abc.Sequence):
+                        yield from flatten(error)
+                    else:
+                        yield error
+
             # Change missing sections errors to show that and not missing field
-            for err_wrapper in e.raw_errors:
+            for err_wrapper in flatten(e.raw_errors):
                 original_exc = err_wrapper.exc
                 if isinstance(original_exc, MissingError):
                     field_name = err_wrapper._loc
@@ -95,7 +104,7 @@ class ConfigHierarchy(BaseModel):
         if exclude is not None:
             for exclude_attr in exclude:
                 if exclude_attr in d:
-                    del d[exclude]
+                    del d[exclude_attr]
         return d
 
     def full_item_name(self, item_name: str = None, delimiter: str = ' -> '):
@@ -105,7 +114,7 @@ class ConfigHierarchy(BaseModel):
             else:
                 return delimiter.join(self._parents + [item_name])
         except AttributeError as e:
-            raise AttributeError(f"{e} not found in {repr(self)}")
+            return f"{e} not found in {BaseModel.__repr__(self)}"
 
     @staticmethod
     def translate_config_data(config_data: MutableMapping):
@@ -163,3 +172,5 @@ class ConfigHierarchy(BaseModel):
             new_instance._root_config = new_instance
             new_instance._parents = []
         return new_instance
+
+
