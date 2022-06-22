@@ -20,7 +20,9 @@ class IniConfigDataLoader(FileConfigDataLoader):
         self.files_read.append(file_path)
         config_data = RawConfigParser()
         config_data.read(file_path, encoding='utf8')
-        config_data_dict = {section: {key: val for key, val in config_data.items(section)} for section in config_data.sections()}
+        config_data_dict = {section: {key: val for key, val in config_data.items(section)}
+                            for section in config_data.sections()
+                            }
 
         return config_data_dict
 

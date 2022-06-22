@@ -1,11 +1,8 @@
 import logging
 from typing import *
 
-from pydantic import PrivateAttr
-
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
 from config_wrangler.config_root import ConfigRoot
-from config_wrangler.config_templates.credentials import PasswordDefaults
 from config_wrangler.utils import merge_configs, interpolate_values
 
 
@@ -13,8 +10,6 @@ class ConfigFromLoaders(ConfigRoot):
     """
     Base class for settings, allowing values to be set by files or environment variables.
     """
-    _model_validators: PrivateAttr(default=[])
-    passwords: PasswordDefaults = None
 
     # noinspection PyMethodParameters
     def __init__(

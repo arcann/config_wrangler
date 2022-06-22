@@ -4,10 +4,7 @@ from typing import List, Any
 from pydantic import PrivateAttr, BaseModel, PydanticValueError
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-
-
-class SectionMissingError(PydanticValueError):
-    msg_template = 'Section required'
+from config_wrangler.config_templates.credentials import PasswordDefaults
 
 
 class BadValueError(PydanticValueError):
@@ -21,7 +18,15 @@ private_attrs = ('_root_config', '_parents', '_name_map')
 
 
 class ConfigRoot(ConfigHierarchy):
+    class Config:
+        validate_all = True
+        validate_assignment = True
+        allow_mutation = True
+        validate_credentials = True
+
     _fill_done: bool = PrivateAttr(default=False)
+    # _model_validators: PrivateAttr(default=[])
+    passwords: PasswordDefaults = None
 
     # noinspection PyMethodParameters
     def __init__(__pydantic_self__, **data: Any) -> None:

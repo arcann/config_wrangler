@@ -27,7 +27,7 @@ class ConfigHierarchy(BaseModel):
     NOTE: This class requires that the top of the hierarchy be an instance of ConfigRoot
     """
     _root_config: 'ConfigFromLoaders' = PrivateAttr(default=None)
-    _parents: List[str] = PrivateAttr()
+    _parents: List[str] = PrivateAttr(default=['parents_not_set'])
     _name_map: Dict[str, str] = PrivateAttr(default={})
 
     # noinspection PyMethodParameters
@@ -108,13 +108,10 @@ class ConfigHierarchy(BaseModel):
         return d
 
     def full_item_name(self, item_name: str = None, delimiter: str = ' -> '):
-        try:
-            if item_name is None:
-                return delimiter.join(self._parents)
-            else:
-                return delimiter.join(self._parents + [item_name])
-        except AttributeError as e:
-            return f"{e} not found in {BaseModel.__repr__(self)}"
+        if item_name is None:
+            return delimiter.join(self._parents)
+        else:
+            return delimiter.join(self._parents + [item_name])
 
     @staticmethod
     def translate_config_data(config_data: MutableMapping):

@@ -3,14 +3,15 @@ import inspect
 import json
 import logging
 import re
-from typing import *
 from datetime import timezone, datetime
+from typing import *
 
 from pydantic import BaseModel
 from pydantic.fields import (
     SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE,
     SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET, SHAPE_DICT, SHAPE_DEFAULTDICT, Field, ModelField,
 )
+from pydicti import dicti, Dicti
 
 from config_wrangler.config_exception import ConfigError
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
@@ -48,6 +49,10 @@ def resolve_variable(root_config_data: MutableMapping, variable_name: str, part_
     variable_name_parts = variable_name.split(part_delimiter)
     result = root_config_data
     for part in variable_name_parts:
+        # Change to case-insensitive dict
+        if not isinstance(result, dicti):
+            result = Dicti(result)
+
         if part in result:
             result = result[part]
         else:
@@ -100,7 +105,9 @@ def interpolate_values(container: MutableMapping, root_config_data: MutableMappi
                                 errors.append((section, str(e),))
                         else:
                             try:
-                                variable_replacement = container[variable_name]
+                                # Change to case-insensitive dict
+                                search_container = Dicti(container)
+                                variable_replacement = search_container[variable_name]
                             except KeyError:
                                 errors.append((section, f"<<{variable_name} NOT FOUND>>",))
 

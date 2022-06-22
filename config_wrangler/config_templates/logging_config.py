@@ -6,13 +6,13 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from CaseInsensitiveDict import CaseInsensitiveDict
 from pydantic import ByteSize
+from pydicti import Dicti
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.config_types.enum import StrEnum, auto_str
 from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 from config_wrangler.utils import TZFormatter
-from config_wrangler.config_types.enum import StrEnum, auto_str
 
 
 class LogLevel(StrEnum):
@@ -152,7 +152,7 @@ class LoggingConfig(ConfigHierarchy):
         root_logger = logging.getLogger()
 
         # Monkey-patch getLogger's dict to be case-insensitive        
-        logger_dict = CaseInsensitiveDict(logging.Logger.manager.loggerDict)  # @UndefinedVariable
+        logger_dict = Dicti(logging.Logger.manager.loggerDict)  # @UndefinedVariable
         logging.Logger.manager.loggerDict = logger_dict
 
         for logger_class, desired_level_name in self.log_levels.items():

@@ -1,4 +1,3 @@
-import logging
 import typing
 import warnings
 from enum import auto
@@ -30,9 +29,9 @@ class Credentials(ConfigHierarchy):
     _private_value_atts = PrivateAttr(default={'raw_password'})
 
     def get_password(self) -> str:
-        log = logging.getLogger(__name__)
-
         if self.password_source is None:
+            if self._root_config is None:
+                raise ValueError("get_password called on Credentials that are not part of a ConfigRoot hierarchy")
             try:
                 passwords_defaults = getattr(self._root_config, 'passwords')
             except AttributeError:
@@ -67,6 +66,8 @@ class Credentials(ConfigHierarchy):
             password = self.raw_password
         elif self.password_source == PasswordSource.KEEPASS:
             try:
+                if self._root_config is None:
+                    raise ValueError("get_password called on Credentials that are not part of a ConfigRoot hierarchy")
                 keepass_config = getattr(self._root_config, self.keepass_config)
             except (KeyError, AttributeError):
                 raise ValueError(
@@ -118,8 +119,13 @@ class Credentials(ConfigHierarchy):
         return values
 
     def _validate_model_password(self):
-        if self.validate_password_on_load:
-            _ = self.get_password()
+        if self._root_config is None:
+            raise ValueError("_validate_model_password called on Credentials that are not part of a ConfigRoot hierarchy")
+        if self._root_config.Config.validate_all and self.validate_password_on_load:
+            config = self._root_config.Config
+            validate_passwords = getattr(config, 'validate_passwords', True)
+            if validate_passwords:
+                _ = self.get_password()
 
     def _iter(
             self,
