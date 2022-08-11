@@ -4,7 +4,7 @@ import boto3
 import moto
 
 from config_wrangler.config_templates.credentials import PasswordSource
-from config_wrangler.config_templates.s3_bucket import S3_Bucket, S3_Bucket_Folder
+from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Folder
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 

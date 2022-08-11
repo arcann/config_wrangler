@@ -4,7 +4,7 @@ from typing import *
 from boto3.s3.transfer import TransferConfig
 from pydantic import PrivateAttr, validator
 
-from config_wrangler.config_templates.aws_session import AWS_Session
+from config_wrangler.config_templates.aws.aws_session import AWS_Session
 
 try:
     import boto3
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         import botostubs
     except ImportError:
         botostubs = None
+
 
 # NOTE: If you are not seeing botostubs code completion in Intellij-based IDEs,
 #       please increase the intellisense filesize limit
@@ -36,11 +37,11 @@ class S3_Bucket(AWS_Session):
         return f"s3://{self.bucket_name}"
 
     def upload_file(
-        self,
-        local_filename: Union[str, Path],
-        key: Union[str, PurePosixPath],
-        extra_args: Optional[dict] = None,
-        transfer_config: Optional[TransferConfig] = None,
+            self,
+            local_filename: Union[str, Path],
+            key: Union[str, PurePosixPath],
+            extra_args: Optional[dict] = None,
+            transfer_config: Optional[TransferConfig] = None,
     ):
         self.client.upload_file(
             Filename=str(local_filename),
@@ -104,22 +105,62 @@ class S3_Bucket(AWS_Session):
         return cast('S3_Bucket', super().get_copy(copied_by))
 
     def nav_to_key(self, key) -> 'S3_Bucket_Key':
-        return S3_Bucket_Key(
-            key=str(key),
-            **self._dict_for_init(exclude={'key'})
+        return self._build_s3_bucket_key(key)
+
+    def nav_to_folder(
+            self,
+            folder: Union[str, Path]
+    ) -> 'S3_Bucket_Folder':
+        return self._build_s3_bucket_folder(folder)
+
+    def nav_to_relative_folder(
+            self,
+            folder: Union[str, Path]
+    ) -> 'S3_Bucket_Folder':
+        return self._build_s3_bucket_folder(folder)
+
+    def __truediv__(
+            self, other: Union[str, Path]
+    ) -> 'S3_Bucket_Key':
+        return self.nav_to_key(other)
+
+    # noinspection SpellCheckingInspection
+    def joinpath(
+        self,
+        *others
+    ) -> Union[
+        'S3_Bucket_Key',
+        'S3_Bucket_Folder'
+    ]:
+        new_path = self
+        for other in others:
+            new_path = new_path / other
+        return new_path
+
+    def _build_s3_bucket_folder(self, folder: Union[str, Path]):
+        return self._factory(
+            S3_Bucket_Folder,
+            exclude={'file_name'},
+            folder=str(folder)
         )
 
-    def nav_to_folder(self, folder) -> 'S3_Bucket_Folder':
-        return S3_Bucket_Folder(
-            folder=str(folder),
-            **self._dict_for_init(exclude={'folder'})
-        )
-
-    def __truediv__(self, key) -> Union['S3_Bucket_Key', 'S3_Bucket_Folder']:
-        if key[-1] == '/' or key == '':
-            return self.nav_to_folder(key)
+    def _build_s3_bucket_folder_file(self, file_name: Union[str, Path], folder: Union[str, Path] = None):
+        if folder is None:
+            return self._factory(
+                S3_Bucket_Folder_File,
+                exclude={'key'},
+                file_name=str(file_name)
+            )
         else:
-            return self.nav_to_key(key)
+            return self._factory(
+                S3_Bucket_Folder_File,
+                exclude={'key'},
+                folder=str(folder),
+                file_name=str(file_name)
+            )
+
+    def _build_s3_bucket_key(self, key: Union[str, Path]):
+        return self._factory(S3_Bucket_Key, key=str(key), exclude={'folder', 'file_name'})
 
 
 class S3_Bucket_Folder(S3_Bucket):
@@ -128,6 +169,7 @@ class S3_Bucket_Folder(S3_Bucket):
     """
     folder: str
 
+    # noinspection PyMethodParameters
     @validator('folder')
     def validate_folder(cls, v):
         # Handle pathlib values
@@ -144,11 +186,11 @@ class S3_Bucket_Folder(S3_Bucket):
         return cast('S3_Bucket_Folder', super().get_copy(copied_by))
 
     def upload_folder_file(
-        self,
-        local_filename: Union[str, Path],
-        key_suffix: Union[str, PurePosixPath],
-        extra_args: Optional[dict] = None,
-        transfer_config: Optional[TransferConfig] = None,
+            self,
+            local_filename: Union[str, Path],
+            key_suffix: Union[str, PurePosixPath],
+            extra_args: Optional[dict] = None,
+            transfer_config: Optional[TransferConfig] = None,
     ):
         full_key = PurePosixPath(self.folder, key_suffix)
         super().upload_file(
@@ -175,27 +217,28 @@ class S3_Bucket_Folder(S3_Bucket):
             create_parents=create_parents,
         )
 
-    def nav_to_folder(self, folder_key) -> 'S3_Bucket_Folder':
+    def nav_to_folder(self, folder_key: Union[str, Path]) -> 'S3_Bucket_Folder':
         new_folder = self.get_copy(copied_by=f".nav_to_folder({folder_key})")
         new_folder.folder = folder_key
         return new_folder
 
-    def nav_to_file(self, file_name) -> 'S3_Bucket_Folder_File':
-        new_folder_file = S3_Bucket_Folder_File(
-            file_name=file_name,
-            **self._dict_for_init(exclude={'file_name'})
+    def nav_to_relative_folder(self, folder: Union[str, Path]) -> 'S3_Bucket_Folder':
+        new_path = PurePosixPath(self.folder) / folder
+        return self.nav_to_folder(new_path)
+
+    def nav_to_file(
+            self,
+            file_name: Union[str, Path]
+    ) -> 'S3_Bucket_Folder_File':
+        return self._build_s3_bucket_folder_file(
+            file_name
         )
-        new_folder_file.file_name = file_name
-        return new_folder_file
 
-    def joinpath(self, *other) -> 'S3_Bucket_Folder':
-        new_folder = self.get_copy(copied_by=f".joinpath({other})")
-        new_key = PurePosixPath(self.folder, *other)
-        new_folder.folder = str(new_key)
-        return new_folder
-
-    def __truediv__(self, other) -> 'S3_Bucket_Folder':
-        return self.joinpath(other)
+    def __truediv__(
+            self, other: Union[str, Path]
+    ) -> 'S3_Bucket_Key':
+        new_path = PurePosixPath(self.folder) / other
+        return self.nav_to_key(new_path)
 
     def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
         if key is None:
@@ -218,9 +261,9 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
         Represents a unique folder & file within an S3 bucket.
         Similar to S3_Bucket_Key but uses folder + file_name instead of a single key.
     """
-    folder: str
     file_name: str
 
+    # noinspection PyMethodParameters
     @validator('file_name')
     def validate_file_name(cls, v):
         # Handle pathlib values
@@ -267,6 +310,13 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
             key = f"{self.folder}/{self.file_name}"
         return super().get_object(key=key)
 
+    def __truediv__(
+            self, other: Union[str, Path]
+    ) -> 'S3_Bucket_Key':
+        # Probably an error but we can assume that file_name is actually a folder name
+        new_path = PurePosixPath(self.folder) / self.file_name / other
+        return self.nav_to_key(new_path)
+
 
 class S3_Bucket_Key(S3_Bucket):
     """
@@ -275,6 +325,7 @@ class S3_Bucket_Key(S3_Bucket):
     """
     key: str
 
+    # noinspection PyMethodParameters
     @validator('key')
     def validate_key(cls, v):
         # Handle pathlib values
@@ -327,3 +378,46 @@ class S3_Bucket_Key(S3_Bucket):
         if key is None:
             key = self.key
         return super().get_object(key=key)
+
+    def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
+        if key is None:
+            key = self.key
+        return super().list_object_keys(key=key)
+
+    def list_object_paths(self, key: Union[str, PurePosixPath] = None) -> List[PurePosixPath]:
+        if key is None:
+            key = self.key
+        return super().list_object_paths(key=key)
+
+    def find_objects(self, key: Union[str, PurePosixPath] = None) -> Iterable['botostubs.S3.S3Resource.ObjectSummary']:
+        if key is None:
+            key = self.key
+        return super().find_objects(key)
+
+    def nav_to_folder(
+            self,
+            folder: Union[str, Path]
+    ) -> 'S3_Bucket_Folder':
+        return self._build_s3_bucket_folder(folder)
+
+    def nav_to_relative_folder(
+            self,
+            folder: Union[str, Path]
+    ) -> 'S3_Bucket_Folder':
+        new_path = PurePosixPath(self.key) / folder
+        return self.nav_to_folder(new_path)
+
+    def nav_to_file(
+            self,
+            file_name: Union[str, Path]
+    ) -> 'S3_Bucket_Folder_File':
+        return self._build_s3_bucket_folder_file(
+            folder=self.key,
+            file_name=file_name
+        )
+
+    def __truediv__(
+            self, other: Union[str, Path]
+    ) -> 'S3_Bucket_Key':
+        new_path = PurePosixPath(self.key) / other
+        return self.nav_to_key(new_path)

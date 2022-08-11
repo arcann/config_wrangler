@@ -40,6 +40,13 @@ class AWS_Session(Credentials):
             )
         return self._session
 
+    def set_session(self, session: boto3.session.Session):
+        self._session = session
+
+    @property
+    def has_session(self) -> bool:
+        return self._session is not None
+
     @property
     def resource(self):
         return self._get_resource()
@@ -61,12 +68,25 @@ class AWS_Session(Credentials):
     def get_copy(self, copied_by: str = 'get_copy') -> 'AWS_Session':
         return cast('AWS_Session', super().get_copy(copied_by))
 
-    def nav_to_bucket(self, bucket_name) -> 'S3_Bucket':
-        from config_wrangler.config_templates.s3_bucket import S3_Bucket
+    def _factory(self, cls, exclude: set = None, **attributes):
+        if exclude is None:
+            exclude = set()
+        exclude.update(attributes.keys())
+        new_object = cls(
+            **attributes,
+            **self._dict_for_init(exclude=exclude)
+        )
+        self.set_as_child(str(cls), new_object)
+        if self.has_session:
+            new_object.set_session(self.session)
+        return new_object
 
-        return S3_Bucket(
+    def nav_to_bucket(self, bucket_name) -> 'S3_Bucket':
+        from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket
+        return self._factory(
+            S3_Bucket,
+            exclude={'bucket_name', 'folder', 'file_name', 'key'},
             bucket_name=bucket_name,
-            **self._dict_for_init(exclude={'bucket_name'})
         )
 
     @staticmethod
