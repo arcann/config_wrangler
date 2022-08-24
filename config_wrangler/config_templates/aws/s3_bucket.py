@@ -218,9 +218,7 @@ class S3_Bucket_Folder(S3_Bucket):
         )
 
     def nav_to_folder(self, folder_key: Union[str, Path]) -> 'S3_Bucket_Folder':
-        new_folder = self.get_copy(copied_by=f".nav_to_folder({folder_key})")
-        new_folder.folder = folder_key
-        return new_folder
+        return self._build_s3_bucket_folder(folder_key)
 
     def nav_to_relative_folder(self, folder: Union[str, Path]) -> 'S3_Bucket_Folder':
         new_path = PurePosixPath(self.folder) / folder
@@ -313,7 +311,7 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
     def __truediv__(
             self, other: Union[str, Path]
     ) -> 'S3_Bucket_Key':
-        # Probably an error but we can assume that file_name is actually a folder name
+        # Probably an error but we can try assuming that file_name is actually a folder name
         new_path = PurePosixPath(self.folder) / self.file_name / other
         return self.nav_to_key(new_path)
 
@@ -342,9 +340,7 @@ class S3_Bucket_Key(S3_Bucket):
         return cast('S3_Bucket_Key', super().get_copy(copied_by))
 
     def nav_to_key(self, key) -> 'S3_Bucket_Key':
-        new_bucket_key = self.get_copy(copied_by=f".nav_to_key({key})")
-        new_bucket_key.file_name = key
-        return new_bucket_key
+        return self._build_s3_bucket_key(key)
 
     def upload_specified_file(
         self,

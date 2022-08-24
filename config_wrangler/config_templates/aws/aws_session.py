@@ -66,7 +66,7 @@ class AWS_Session(Credentials):
         return self.session.client(service, region_name=self.region_name)
 
     def get_copy(self, copied_by: str = 'get_copy') -> 'AWS_Session':
-        return cast('AWS_Session', super().get_copy(copied_by))
+        return self._factory(cls=self.__class__)
 
     def _factory(self, cls, exclude: set = None, **attributes):
         if exclude is None:
