@@ -1,14 +1,11 @@
-import inspect
 import logging
 import os
-import typing
 from copy import deepcopy
+from typing import *
 
 from pydantic import BaseModel
 
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
-from config_wrangler.config_exception import ConfigError
-from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
 from config_wrangler.utils import walk_model, match_config_data_to_field
 
 
@@ -18,18 +15,18 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
     Made to fit into ConfigLoader approach with nested models.
     """
 
-    def __init__(self, env_prefix: str = None, config_data_dict: typing.Dict[str, typing.Any] = None, **kwargs):
+    def __init__(self, env_prefix: str = None, config_data_dict: Dict[str, Any] = None, **kwargs):
         super().__init__(config_data_dict=config_data_dict, **kwargs)
         self.env_prefix = env_prefix or ''
         self.log = logging.getLogger(__name__)
 
-    def read_config_data(self, model: BaseModel) -> typing.MutableMapping:
+    def read_config_data(self, model: BaseModel) -> MutableMapping:
         config_data = deepcopy(self._init_config_data)
 
         env_vars = {k.lower(): v for k, v in os.environ.items()}
 
         for field, parents in walk_model(model):
-            env_val: typing.Optional[str] = None
+            env_val: Optional[str] = None
             # Note: field.field_info.extra['env_names'] is set from the 'env' variable on the field or in Config.
             #       See https://pydantic-docs.helpmanual.io/usage/settings/#environment-variable-names
             if 'env_names' in field.field_info.extra:
@@ -39,9 +36,6 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
                     if env_val is not None:
                         break
 
-            dynamic_ref = False
-            if inspect.isclass(field.type_) and issubclass(field.type_, DynamicallyReferenced):
-                dynamic_ref = True
             possible_names = ('_', '.', ':')
 
             if env_val is None:
@@ -86,4 +80,3 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
                 if field.alias not in sub_config:
                     sub_config[field.alias] = env_val
         return config_data
-

@@ -1,4 +1,4 @@
-import typing
+from typing import *
 from datetime import date, datetime, time
 from enum import Enum
 from pathlib import Path
@@ -15,7 +15,7 @@ class TomlConfigDataLoader(FileConfigDataLoader):
     def __init__(
             self,
             file_name: str,
-            start_path: typing.Optional[str] = None,
+            start_path: Optional[str] = None,
     ):
         super().__init__(
             start_path=start_path,
@@ -28,7 +28,7 @@ class TomlConfigDataLoader(FileConfigDataLoader):
                                f"Use pip install toml or poetry add toml as appropriate.")
         self.toml = toml
 
-    def _read_file(self, file_path: Path) -> typing.MutableMapping:
+    def _read_file(self, file_path: Path) -> MutableMapping:
         self.log.info(f"Reading {file_path}")
         self.files_read.append(file_path)
         with file_path.open('rt', encoding='utf8') as toml_content:

@@ -1,17 +1,18 @@
 import logging
-import typing
+from typing import *
 
 from pydantic import DirectoryPath, Field
 
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.logging_config import LoggingConfig
-from config_wrangler.config_templates.s3_bucket import S3_Bucket
+from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket
 from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 
 
+# noinspection PyPep8Naming
 class S3_Bucket_KeyPrefixes(S3_Bucket):
-    key_prefixes: typing.List[str]
+    key_prefixes: List[str]
 
 
 class Environment(ConfigHierarchy):

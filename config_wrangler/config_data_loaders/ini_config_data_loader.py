@@ -1,6 +1,6 @@
 import inspect
 import re
-import typing
+from typing import *
 from configparser import RawConfigParser
 from pathlib import Path
 
@@ -15,7 +15,7 @@ from config_wrangler.utils import full_name
 
 
 class IniConfigDataLoader(FileConfigDataLoader):
-    def _read_file(self, file_path: Path) -> typing.MutableMapping:
+    def _read_file(self, file_path: Path) -> MutableMapping:
         self.log.info(f"Reading {file_path}")
         self.files_read.append(file_path)
         config_data = RawConfigParser()
@@ -30,7 +30,7 @@ class IniConfigDataLoader(FileConfigDataLoader):
         file_path = Path(self.start_path, self.file_name)
 
         with file_path.open('wt') as config_file:
-            logging_re = re.compile(r'typing.Dict[str, (\W+.)*LogLevel]')
+            logging_re = re.compile(r'Dict[str, (\W+.)*LogLevel]')
             app_config_signature = inspect.signature(config_model)
             for section in app_config_signature.parameters.values():
                 if section.name[0] != '_':
@@ -46,7 +46,8 @@ class IniConfigDataLoader(FileConfigDataLoader):
                         print(f"__main__=DEBUG", file=config_file)
                         print(f"requests=INFO", file=config_file)
                         print(f"; etc for each module that needs a unique log level", file=config_file)
-                    elif str(section.annotation).startswith('typing.Dict[str, '):
+                    elif str(section.annotation).startswith('typing.Dict[str, ') or \
+                            str(section.annotation).startswith('Dict[str, '):
                         print(f"; {str(section.annotation)}", file=config_file)
                         print(f"; setting1 = value", file=config_file)
                         print(f"; setting2 = value", file=config_file)
@@ -80,7 +81,7 @@ class IniConfigDataLoader(FileConfigDataLoader):
             config: BaseModel,
             default_delimiter='\n',
             parents=None,
-            root_config_data: typing.MutableMapping = None
+            root_config_data: MutableMapping = None
     ) -> dict:
         if parents is None:
             parents = []

@@ -1,6 +1,6 @@
 import json
 import os
-import typing
+from typing import *
 import unittest
 from datetime import date, time, datetime
 from unittest import mock
@@ -35,14 +35,14 @@ class TestSection(ConfigHierarchy):
     my_list_json: list
     my_list_c: list = Field(delimiter=',')
     my_list_nl: list = Field(delimiter='\n')
-    my_list_int_c: typing.List[int] = Field(delimiter=',')
+    my_list_int_c: List[int] = Field(delimiter=',')
     my_tuple_c: tuple = Field(delimiter=',')
     my_tuple_nl: tuple = Field(delimiter='\n')
-    my_tuple_int_c: typing.Tuple[int, int, int] = Field(delimiter=',')
+    my_tuple_int_c: Tuple[int, int, int] = Field(delimiter=',')
     my_dict: dict
-    my_dict_str_int: typing.Dict[str, int]
+    my_dict_str_int: Dict[str, int]
     my_set: set
-    my_set_int: typing.Set[int]
+    my_set_int: Set[int]
     my_frozenset: frozenset
     my_date: date
     my_time: time

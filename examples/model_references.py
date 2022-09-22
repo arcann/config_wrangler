@@ -1,16 +1,17 @@
-import typing
+from typing import *
 
 from pydantic import Field
 
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_templates.s3_bucket import S3_Bucket
+from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
 
 
+# noinspection PyPep8Naming
 class Bucket_Compare_Section(ConfigHierarchy):
-    buckets_to_compare: typing.List[DynamicallyReferenced]
-    buckets_to_compare_nl: typing.List[DynamicallyReferenced] = Field(delimiter='\n')
+    buckets_to_compare: List[DynamicallyReferenced]
+    buckets_to_compare_nl: List[DynamicallyReferenced] = Field(delimiter='\n')
     compare_results_output: str
 
 

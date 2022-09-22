@@ -1,17 +1,18 @@
-import typing
+from typing import *
 from datetime import date, time, datetime
 
 from pydantic import DirectoryPath, Field, AnyHttpUrl
 
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_templates.s3_bucket import S3_Bucket
+from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
 from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 
 
+# noinspection PyPep8Naming
 class S3_Bucket_KeyPrefixes(S3_Bucket):
-    key_prefixes: typing.List[str]
+    key_prefixes: List[str]
 
 
 class Environment(ConfigHierarchy):
@@ -33,14 +34,14 @@ class TestSection(ConfigHierarchy):
     my_list_json: list
     my_list_c: list = Field(delimiter=',')
     my_list_nl: list = Field(delimiter='\n')
-    my_list_int_c: typing.List[int] = Field(delimiter=',')
+    my_list_int_c: List[int] = Field(delimiter=',')
     my_tuple_c: tuple = Field(delimiter=',')
     my_tuple_nl: tuple = Field(delimiter='\n')
-    my_tuple_int_c: typing.Tuple[int, int, int] = Field(delimiter=',')
+    my_tuple_int_c: Tuple[int, int, int] = Field(delimiter=',')
     my_dict: dict
-    my_dict_str_int: typing.Dict[str, int]
+    my_dict_str_int: Dict[str, int]
     my_set: set
-    my_set_int: typing.Set[int]
+    my_set_int: Set[int]
     my_frozenset: frozenset
     my_date: date
     my_time: time

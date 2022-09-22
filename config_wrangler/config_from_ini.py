@@ -1,4 +1,4 @@
-import typing
+from typing import *
 
 from config_wrangler.config_from_loaders import ConfigFromLoaders
 from config_wrangler.config_data_loaders.ini_config_data_loader import IniConfigDataLoader
@@ -9,8 +9,8 @@ class ConfigFromIni(ConfigFromLoaders):
     def __init__(
             __pydantic_self__,
             file_name: str = 'config.ini',
-            start_path: typing.Optional[str] = None,
-            **kwargs: typing.Dict[str, typing.Any]
+            start_path: Optional[str] = None,
+            **kwargs: Dict[str, Any]
     ) -> None:
         """
         Note: Uses something other than `self` the first arg to allow "self" as a settable attribute

@@ -9,7 +9,7 @@ repository = "https://github.com/arcann/config_wrangler"
 
 
 [tool.poetry.dependencies]
-python = ">=3.6.1, <4.0.0"
+python = ">=3.7, <4.0.0"
 pydantic = ">=1.8.2"
 StrEnum = "^0.4.7"
 SQLAlchemy = {version = ">=1.4", optional = true}
@@ -25,12 +25,25 @@ redshift = ["boto3"]
 s3 = ["boto3"]
 
 [tool.poetry.dev-dependencies]
-tox = "^3.24.5"
-tox-poetry-installer = {extras = ["poetry"], version = "^0.8.3"}
-tox-run-command = "^0.4"
-botostubs = "^0.15.1"
-boto3 = "^1.23.4"
-moto = "^3.1.9"
+tox = ">=3.24.5"
+#tox-poetry-installer = {extras = ["poetry"], version = "*"}
+tox-run-command = ">=0.4"
+botostubs = ">=0.15.1"
+moto = ">=3.1.9"
+# Optional but required for tests so needed for development
+boto3 = ">=1.23.4"
+keyring = "^23.9.3"
+pykeepass = ">4.0.0"
+SQLAlchemy = ">=1.4"
+
+# Required for building docs
+Sphinx = ">=4.5.0,<=5.0"
+sphinx-pydantic = ">=0.1.1"
+autodoc-pydantic = ">=1.7.2"
+sphinx-paramlinks = ">=0.5.4"
+sphinx-sizzle-theme = ">=0.1.1"
+toml = "^0.10.2"
+sphinx-autobuild = "^2021.3.14"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

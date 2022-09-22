@@ -1,4 +1,4 @@
-import typing
+from typing import *
 
 from auto_all import public
 from pydantic import PrivateAttr, root_validator
@@ -16,7 +16,7 @@ class KeepassConfig(ConfigHierarchy):
     raw_password: str = None
     keyring_section: str = None
     keyring_user_id: str = None
-    alternate_group_names: typing.Dict[str, str] = {}
+    alternate_group_names: Dict[str, str] = {}
 
     _db = PrivateAttr(default=None)
     _alternate_group_names_lower = PrivateAttr(default=None)

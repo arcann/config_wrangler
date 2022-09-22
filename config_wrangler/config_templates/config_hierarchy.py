@@ -24,7 +24,10 @@ private_attrs = ('_root_config', '_parents', '_name_map')
 
 class ConfigHierarchy(BaseModel):
     """
-    NOTE: This class requires that the top of the hierarchy be an instance of ConfigRoot
+    A non-root member of a hierarchy of configuration items.
+
+    NOTE: This class requires that the top of the hierarchy be an instance of
+    :py:class:`config_wrangler.config_root.ConfigRoot`
     """
     _root_config: 'ConfigFromLoaders' = PrivateAttr(default=None)
     _parents: List[str] = PrivateAttr(default=['parents_not_set'])
@@ -108,6 +111,9 @@ class ConfigHierarchy(BaseModel):
         return d
 
     def full_item_name(self, item_name: str = None, delimiter: str = ' -> '):
+        """
+        The fully qualified name of this config item in the config hierarchy.
+        """
         if item_name is None:
             return delimiter.join(self._parents)
         else:
@@ -115,17 +121,24 @@ class ConfigHierarchy(BaseModel):
 
     @staticmethod
     def translate_config_data(config_data: MutableMapping):
+        """
+        Children classes can provide translation logic to allow older config files to be used
+        with newer config class definitions.
+        """
         return config_data
 
-    def _translate_name(self, old_name):
-        if old_name in self._name_map:
-            return self._name_map[old_name]
-        else:
-            return old_name
-
     def get(self, section, item, fallback=...):
+        """
+        Used as a drop in replacement for ConfigParser.get() with dynamic config field names
+        (using a string variable for the section and item names instead of python code attribute access)
+
+        .. warning::
+
+            With this method Python code checkers (linters) will not warn about invalid config items.
+            You can end up with runtime AttributeError errors.
+        """
         try:
-            section_obj = getattr(self, self._translate_name(section))
+            section_obj = getattr(self, section)
             return getattr(section_obj, item)
         except AttributeError:
             if fallback is ...:
@@ -134,6 +147,15 @@ class ConfigHierarchy(BaseModel):
                 return fallback
 
     def getboolean(self, section, item, fallback=...) -> bool:
+        """
+        Used as a drop in replacement for ConfigParser.getboolean() with dynamic config field names
+        (using a string variable for the section and item names instead of python code attribute access)
+
+        .. warning::
+
+            With this method Python code checkers (linters) will not warn about invalid config items.
+            You can end up with runtime AttributeError errors.
+        """
         value = self.get(section=section, item=item, fallback=fallback)
         if value is None:
             value = False
@@ -142,6 +164,16 @@ class ConfigHierarchy(BaseModel):
         return value
 
     def get_list(self, section, item, fallback=...) -> list:
+        """
+        Used as a drop in replacement for ConfigParser.get() + list parsing with dynamic config field names
+        (using a string variable for the section and item names instead of python code attribute access)
+        that is then parsed as a list.
+
+        .. warning::
+
+            With this method Python code checkers (linters) will not warn about invalid config items.
+            You can end up with runtime AttributeError errors.
+        """
         value = self.get(section=section, item=item, fallback=fallback)
         if value is None:
             value = []
@@ -157,10 +189,20 @@ class ConfigHierarchy(BaseModel):
             raise KeyError(str(e))
 
     def set_as_child(self, name: str, otherConfigItem: 'ConfigHierarchy'):
+        """
+        Set this configuration as a child in the hierarchy of another config.
+        For any programmatically created config objects this is required so that the
+        new object 'knows' where it lives in the hierarchy -- most importantly so that
+        it can find the hierarchies root object.
+        """
         otherConfigItem._parents = self._parents + [name]
         otherConfigItem._root_config = self._root_config
 
     def get_copy(self, copied_by: str = 'get_copy') -> 'ConfigHierarchy':
+        """
+        Copy this configuration. Useful when you need to programmatically modify a
+        configuration without modifying the original base configuration.
+        """
         new_instance = self.copy(deep=False)
         try:
             self.set_as_child(copied_by, new_instance)

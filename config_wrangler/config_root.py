@@ -18,6 +18,12 @@ private_attrs = ('_root_config', '_parents', '_name_map')
 
 
 class ConfigRoot(ConfigHierarchy):
+    """
+    The root member of a hierarchy of configuration items.
+
+    NOTE: Children config items should be instances of
+    :py:class:`config_wrangler.config_templates.config_hierarchy.ConfigHierarchy`
+    """
     class Config:
         validate_all = True
         validate_assignment = True
@@ -27,6 +33,9 @@ class ConfigRoot(ConfigHierarchy):
     _fill_done: bool = PrivateAttr(default=False)
     # _model_validators: PrivateAttr(default=[])
     passwords: PasswordDefaults = None
+    """
+    Default configuration for passwords within this config hierarchy.
+    """
 
     # noinspection PyMethodParameters
     def __init__(__pydantic_self__, **data: Any) -> None:

@@ -1,6 +1,6 @@
 import logging
 import sys
-import typing
+from typing import *
 from contextlib import contextmanager
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -38,7 +38,7 @@ class LoggingConfig(ConfigHierarchy):
     log_files_to_keep: int = 10
     logging_date_format: str = '%Y-%m-%d %H:%M:%S%z'
     trace_logging_setup: bool = False
-    log_levels: typing.Dict[str, LogLevel]
+    log_levels: Dict[str, LogLevel]
 
     @staticmethod
     def get_dated_log_file_name(
@@ -218,7 +218,7 @@ class LoggingConfig(ConfigHierarchy):
         if not hasattr(root_logger, 'config_wrangler_setup_done'):
             # Store info that we have already setup logging in the root logger.
             # This could be stored in the config, it would be too easy for methods to open
-            # their own configs and thus will not know the logging had already been setup.
+            # their own configs and thus will not know the logging had already been set up.
             root_logger.config_wrangler_setup_done = True
 
             # Close out any existing handlers
@@ -262,9 +262,9 @@ class LoggingConfig(ConfigHierarchy):
 
             console_entry_format = self.console_entry_format
             if console_entry_format:
-                console_entry_formater = TZFormatter(console_entry_format, self.logging_date_format)
-                console_log.setFormatter(console_entry_formater)
-                console_error_log.setFormatter(console_entry_formater)
+                console_entry_formatter = TZFormatter(console_entry_format, self.logging_date_format)
+                console_log.setFormatter(console_entry_formatter)
+                console_error_log.setFormatter(console_entry_formatter)
 
             self.setup_log_levels()
 

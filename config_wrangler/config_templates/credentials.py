@@ -1,4 +1,4 @@
-import typing
+from typing import *
 import warnings
 from enum import auto
 
@@ -17,18 +17,70 @@ class PasswordSource(StrEnum):
 
 class Credentials(ConfigHierarchy):
     user_id: str
+    """
+    The user ID to use
+    """
+
     password_source: PasswordSource = None
+    """
+    The source to use when getting a password for the user.  
+    See :py:class:`PasswordSource` for valid values.
+    """
+
     raw_password: str = None
+    """
+    This is only used for the extremely non-secure `CONFIG_FILE` password source.
+    The password is stored directly in the config file next to the user_id with
+    the setting name `raw_password`
+    """
+
     keyring_section: str = None
+    """
+    If the password_source is KEYRING, then which section (AKA system)
+    should this module look for the password in.
+    
+    See https://pypi.org/project/keyring/
+    or https://github.com/jaraco/keyring
+    """
     keepass_config: str = 'keepass'
+    """
+    If the password_source is KEEPASS, then which root level config item contains
+    the settings for Keepass (must be an instance of 
+    :py:class:`config_wrangler.config_templates.keepass_config.KeepassConfig`)
+    """
+
     keepass_group: str = None
+    """
+    If the password_source is KEEPASS, which group in the Keepass database should
+    be searched for an entry with a matching entry.
+    
+    If is None, then the `KeepassConfig.default_group` value will be checked.
+    If that is also None, then a ValueError will be raised.
+    """
+
     keepass_title: str = None
+    """
+    If the password_source is KEEPASS, this is an optional filter on the title
+    of the keepass entries in the group.
+    """
+
     validate_password_on_load: bool = True
+    """
+    Should config_wrangler query the password source for this password at 
+    load (startup) time? If so, it will raise an error if the password is 
+    None or an empty string. It **does not** actually connect or 
+    authenticate the user_id & password combination.
+    """
 
     # Values to hide from config exports
     _private_value_atts = PrivateAttr(default={'raw_password'})
 
     def get_password(self) -> str:
+        """
+        Get the password for this resource.
+        `password_source` controls where it looks for the password.
+        If that is None, then the root level `passwords` container is checked for `password_source` value.
+        """
         if self.password_source is None:
             if self._root_config is None:
                 raise ValueError("get_password called on Credentials that are not part of a ConfigRoot hierarchy")
@@ -131,8 +183,8 @@ class Credentials(ConfigHierarchy):
             self,
             to_dict: bool = False,
             by_alias: bool = False,
-            include: typing.Union['pydantic.typing.AbstractSetIntStr', 'pydantic.typing.MappingIntStrAny'] = None,
-            exclude: typing.Union['pydantic.typing.AbstractSetIntStr', 'pydantic.typing.MappingIntStrAny'] = None,
+            include: Union['pydantic.typing.AbstractSetIntStr', 'pydantic.typing.MappingIntStrAny'] = None,
+            exclude: Union['pydantic.typing.AbstractSetIntStr', 'pydantic.typing.MappingIntStrAny'] = None,
             exclude_unset: bool = False,
             exclude_defaults: bool = False,
             exclude_none: bool = False,

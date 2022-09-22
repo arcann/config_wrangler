@@ -5,11 +5,12 @@
 
 pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions.
 
-
-
 ## Installation
 
-Install using `pip install -U config-wrangler` or `conda install config-wrangler -c conda-forge`.
+Install using your package manager of choice:
+  - `poetry add config-wrangler`
+  - `pip install -U config-wrangler` 
+  - `conda install config-wrangler -c conda-forge`.
 
 ## A Simple Example
 
