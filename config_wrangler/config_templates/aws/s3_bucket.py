@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import PurePosixPath, Path
 from typing import *
 
@@ -35,6 +36,27 @@ class S3_Bucket(AWS_Session):
 
     def __str__(self):
         return f"s3://{self.bucket_name}"
+
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def _get_bucket_region(client, bucket_name) -> str:
+        location = client.get_bucket_location(Bucket=bucket_name)
+        if location is None or location['LocationConstraint'] is None:
+            # https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html#API_CreateBucket_RequestSyntax
+            # If you don't specify a Region, the bucket is created in the US East (N. Virginia) Region (us-east-1).
+            return 'us-east-1'
+        else:
+            return location['LocationConstraint']
+
+    def get_bucket_region(self) -> str:
+        """
+        Get the region_name from the actual S3 bucket definition.
+        NOTE: This can differ from the region_name attribute specified in the init call to this class
+              or the config file that loads it.
+              The region_name attribute is used for establishing the AWS session.
+              get_bucket_region() is used to find out in which region the data is stored.
+        """
+        return S3_Bucket._get_bucket_region(self.client, self.bucket_name)
 
     def upload_file(
             self,

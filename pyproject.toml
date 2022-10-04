@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "config_wrangler"
-version = "0.4.1"
+version = "0.4.2"
 license = "MIT"
 authors = ["Derek Wood"]
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
@@ -26,7 +26,6 @@ s3 = ["boto3"]
 
 [tool.poetry.dev-dependencies]
 tox = ">=3.24.5"
-#tox-poetry-installer = {extras = ["poetry"], version = "*"}
 tox-run-command = ">=0.4"
 botostubs = ">=0.15.1"
 moto = ">=3.1.9"

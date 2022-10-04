@@ -18,13 +18,21 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             ACL='private',
         )
         self.bucket2_name = 'mock_bucket2'
+        self.bucket2_region = 'us-west-1'
         self.mock_client.create_bucket(
             Bucket=self.bucket2_name,
+            CreateBucketConfiguration={
+                'LocationConstraint': self.bucket2_region,
+            }
         )
 
         self.bucket3_name = 'mock_bucket3'
+        self.bucket3_region = 'eu-central-1'
         self.mock_client.create_bucket(
             Bucket=self.bucket3_name,
+            CreateBucketConfiguration={
+                'LocationConstraint': self.bucket3_region,
+            }
         )
 
         self.example1_key = 'test_good.ini'
@@ -51,6 +59,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         self.assertIn(self.example1_key, contents)
         self.assertIn(self.example2_key, contents)
         self.assertEqual(len(contents), 2)
+        self.assertEqual(bucket.get_bucket_region(), 'us-east-1')
 
         bucket2 = S3_Bucket(
             bucket_name=self.bucket2_name,
@@ -61,6 +70,15 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         contents = bucket2.list_object_keys(key=None)
         self.assertNotIn(self.example1_key, contents)
         self.assertEqual(len(contents), 0)
+        self.assertEqual(bucket2.get_bucket_region(), self.bucket2_region)
+
+        bucket3 = S3_Bucket(
+            bucket_name=self.bucket3_name,
+            user_id='mock_user',
+            password_source=PasswordSource.CONFIG_FILE,
+            raw_password='super secret password',
+        )
+        self.assertEqual(bucket3.get_bucket_region(), self.bucket3_region)
 
     def test_list_folder_files(self):
         bucket_folder = S3_Bucket_Folder(
