@@ -32,6 +32,7 @@ class ConfigRoot(ConfigHierarchy):
 
     _fill_done: bool = PrivateAttr(default=False)
     # _model_validators: PrivateAttr(default=[])
+
     passwords: PasswordDefaults = None
     """
     Default configuration for passwords within this config hierarchy.

@@ -1,18 +1,16 @@
-from typing import *
 import warnings
-from enum import auto
+from typing import *
 
 import pydantic.typing
 from pydantic import PrivateAttr, root_validator
-from strenum import StrEnum
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.config_templates.keepass_config import KeepassConfig
+from config_wrangler.config_templates.password_defaults import PasswordDefaults
+from config_wrangler.config_templates.password_source import PasswordSource
+from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
 
-
-class PasswordSource(StrEnum):
-    CONFIG_FILE = auto()
-    KEYRING = auto()
-    KEEPASS = auto()
+__all__ = ['Credentials', 'PasswordDefaults', 'PasswordSource']
 
 
 class Credentials(ConfigHierarchy):
@@ -48,6 +46,11 @@ class Credentials(ConfigHierarchy):
     the settings for Keepass (must be an instance of 
     :py:class:`config_wrangler.config_templates.keepass_config.KeepassConfig`)
     """
+    keepass: KeepassConfig = None
+    """
+    If the password_source is KEEPASS, then load a sub-section with the 
+    :py:class:`config_wrangler.config_templates.keepass_config.KeepassConfig`) settings
+    """
 
     keepass_group: str = None
     """
@@ -74,6 +77,84 @@ class Credentials(ConfigHierarchy):
 
     # Values to hide from config exports
     _private_value_atts = PrivateAttr(default={'raw_password'})
+
+    def _get_password_keyring(self):
+        if self.keyring_section is None:
+            raise ValueError(f"{self.full_item_name()} keyring_section is None but password_source was keyring")
+        import keyring
+        password = keyring.get_password(self.keyring_section, self.user_id)
+        search_info = f"{self.keyring_section} {self.user_id}"
+        return password, search_info
+
+    def _get_password_config(self):
+        warnings.warn(
+            'Passwords stored directly in config or worse in code are not safe. Please make sure to fix this before deploying.'
+        )
+        password = self.raw_password
+        search_info = f"{self.full_item_name()}.raw_password"
+        return password, search_info
+
+    def _get_keepass_config_str_ref(self) -> KeepassConfig:
+        # Try older keepass_config string reference
+        keepass_config = None
+        if self.keepass_config is not None:
+            try:
+                if self._root_config is None:
+                    raise ValueError("get_password called on Credentials that are not part of a ConfigRoot hierarchy (and keepass_config used)")
+                keepass_config = getattr(self._root_config, self.keepass_config)
+                if not isinstance(keepass_config, KeepassConfig):
+                    raise ValueError(f"{self.full_item_name()} keepass_config is {type(keepass_config)} = {keepass_config} not KeepassConfig instance")
+            except (KeyError, AttributeError):
+                pass
+        return keepass_config
+
+    def _get_keepass_config_sub_section(self) -> KeepassConfig:
+        if self.keepass is not None:
+            keepass_config = self.keepass
+        else:
+            # Try root passwords subsection definition
+            if self._root_config is None:
+                raise ValueError(
+                    "get_password called on Credentials that are not part of a ConfigRoot hierarchy "
+                    "and does not have a local keepass_config or keepass sub-section"
+                )
+            if self._root_config.passwords is None:
+                raise ValueError(
+                    f"{self.full_item_name()} get_password called with PasswordSource = KEEPASS, "
+                    f"but keepass_config/keepass is not in "
+                    f"local section and yet the root passwords section is missing."
+                )
+            if self._root_config.passwords.keepass is None:
+                raise ValueError(
+                    f"{self.full_item_name()} get_password called with PasswordSource = KEEPASS, but keepass_config/keepass is not in "
+                    f"local section and yet the root passwords section is also missing keepass_config."
+                )
+            keepass_config = self._root_config.passwords.keepass
+
+        if not isinstance(keepass_config, KeepassConfig):
+            raise ValueError(f"{self.full_item_name()} keepass_config is {type(keepass_config)} = {keepass_config} not KeepassConfig instance")
+
+        return keepass_config
+
+    def _get_password_keepass(self):
+        keepass_config = self._get_keepass_config_str_ref()
+        if keepass_config is None:
+            keepass_config = self._get_keepass_config_sub_section()
+
+        try:
+            search_info = keepass_config.full_item_name()
+            get_password = keepass_config.get_password
+            try:
+                password = get_password(self.keepass_group, self.keepass_title, self.user_id)
+            except ValueError as e:
+                raise ValueError(f"{self.full_item_name()} -> keepass config {keepass_config.full_item_name()} error {e}")
+        except AttributeError as e:
+            raise ValueError(
+                f"{self.full_item_name()} -> keepass config {keepass_config.full_item_name()} does not appear to be valid. "
+                f"{e}"
+            )
+
+        return password, search_info
 
     def get_password(self) -> str:
         """
@@ -104,40 +185,12 @@ class Credentials(ConfigHierarchy):
                         f"and 'passwords' section does not have 'password_source' {e} "
                     )
 
-        search_info = ''
         if self.password_source == PasswordSource.KEYRING:
-            if self.keyring_section is None:
-                raise ValueError(f"{self.full_item_name()} keyring_section is None but password_source was keyring")
-            import keyring
-            password = keyring.get_password(self.keyring_section, self.user_id)
-            search_info = f"{self.keyring_section} {self.user_id}"
+            password, search_info = self._get_password_keyring()
         elif self.password_source == PasswordSource.CONFIG_FILE:
-            warnings.warn(
-                'Passwords stored directly in config or worse in code are not safe. Please make sure to fix this before deploying.'
-            )
-            password = self.raw_password
+            password, search_info = self._get_password_config()
         elif self.password_source == PasswordSource.KEEPASS:
-            try:
-                if self._root_config is None:
-                    raise ValueError("get_password called on Credentials that are not part of a ConfigRoot hierarchy")
-                keepass_config = getattr(self._root_config, self.keepass_config)
-            except (KeyError, AttributeError):
-                raise ValueError(
-                    f"{self.full_item_name()} Keepass config section '{self.keepass_config}' not found in config data"
-                )
-            try:
-                get_password = keepass_config.get_password
-            except AttributeError as e:
-                raise ValueError(
-                    f"{self.full_item_name()} Keepass config section '{self.keepass_config}' does not appear to be valid. "
-                    f"{e}"
-                )
-
-            try:
-                password = get_password(self.keepass_group, self.keepass_title, self.user_id)
-            except ValueError as e:
-                raise ValueError(f"{self.full_item_name()} error {e}")
-
+            password, search_info = self._get_password_keepass()
         else:
             raise ValueError(f"{self.full_item_name()} invalid password_source {self.password_source}")
 
@@ -205,14 +258,3 @@ class Credentials(ConfigHierarchy):
             if key in self._private_value_atts and value is not None:
                 value = '*' * 8
             yield key, value
-
-
-class PasswordDefaults(ConfigHierarchy):
-    password_source: PasswordSource = None
-
-    @root_validator
-    def check_password(cls, values):
-        if 'password_source' in values:
-            if values['password_source'] is not None:
-                values['password_source'] = values['password_source'].upper()
-        return values

@@ -377,7 +377,11 @@ def match_config_data_to_field_or_submodel(
         root_config_data: MutableMapping = None,
         parents=None
 ):
-    create_from_section_names = field.field_info.extra.get('create_from_section_names', False)
+    if inspect.isclass(field.type_):
+        create_from_section_names_default = issubclass(field.type_, DynamicallyReferenced)
+    else:
+        create_from_section_names_default = False
+    create_from_section_names = field.field_info.extra.get('create_from_section_names', create_from_section_names_default)
 
     if inspect.isclass(field.type_) and issubclass(field.type_, DynamicallyReferenced):
         updated_value = match_config_data_to_field(
@@ -390,8 +394,10 @@ def match_config_data_to_field_or_submodel(
         )
         if isinstance(updated_value, list):
             updated_value = [{'ref': entry} for entry in updated_value]
-        else:  # Dict
+        elif hasattr(updated_value, 'items'):  # dict
             updated_value = {key: {'ref': entry} for key, entry in updated_value.items()}
+        else:  # str
+            updated_value = {'ref': updated_value}
     elif hasattr(field.type_, '__fields__') and not create_from_section_names:
         updated_value = match_config_data_to_model(
             model=field.type_,

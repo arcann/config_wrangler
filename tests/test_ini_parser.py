@@ -10,6 +10,7 @@ from pydantic import Field, AnyHttpUrl, DirectoryPath
 
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.config_templates.credentials import PasswordDefaults
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
 from tests.base_tests_mixin import Base_Tests_Mixin
@@ -72,10 +73,12 @@ class TestSettings(ConfigHierarchy):
     config_files_path: DirectoryPath
 
 
-class ConfigWithKeypass(ConfigToTestWith):
-    keepass: KeepassConfig
-
+class ConfigWithTestFilePath(ConfigToTestWith):
     test_settings: TestSettings
+
+
+class ConfigWithKeypass(ConfigWithTestFilePath):
+    keepass: KeepassConfig
 
 
 class FakeKeepassConfig(ConfigHierarchy):
@@ -317,7 +320,7 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         exc_str = str(raises_cm.exception)
         print("Exception str")
         print(exc_str)
-        self.assertIn("'keepass' does not appear to be valid",  exc_str)
+        self.assertIn("keepass_config",  exc_str)
 
     def test_read_keepass_bad_group(self):
         try:
@@ -328,7 +331,9 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
                 file_name='test_keepass_good.ini',
                 start_path=self.get_test_files_path()
             )
-            config.keepass.database_path = os.path.join(self.get_test_files_path(), 'keepass_db.kdbx')
+            config.keepass.database_path = os.path.join(
+                self.get_test_files_path(), 'keepass_db.kdbx'
+            )
 
             config.target_database.keepass_group = 'bad'
             with self.assertRaises(ValueError) as raises_cm:
@@ -364,6 +369,78 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
 
         except ImportError:
             self.skipTest(f"Test requires pykeepass")
+
+    def test_read_keepass_sub_good(self):
+        try:
+            from pykeepass import PyKeePass
+        except ImportError:
+            PyKeePass = None
+
+        try:
+            os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
+            config = ConfigWithTestFilePath(
+                file_name='test_keepass_good_keepass_sub.ini',
+                start_path=self.get_test_files_path()
+            )
+            config.target_database.keepass.database_path = os.path.join(self.get_test_files_path(),  'keepass_db.kdbx')
+            self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
+
+        except (ValueError, ImportError) as e:
+            if "No module named 'pykeepass" in str(e):
+                if PyKeePass is None:
+                    self.skipTest(f"Test requires pykeepass")
+                else:
+                    raise "pykeepass imported by test but not by config_wrangler"
+            else:
+                raise
+
+    def test_read_keepass_shared_sub_good(self):
+        try:
+            from pykeepass import PyKeePass
+        except ImportError:
+            PyKeePass = None
+
+        try:
+            os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
+            config = ConfigWithTestFilePath(
+                file_name='test_keepass_good_keepass_shared_sub.ini',
+                start_path=self.get_test_files_path()
+            )
+            config.passwords.keepass.database_path = os.path.join(self.get_test_files_path(),  'keepass_db.kdbx')
+            self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
+
+        except (ValueError, ImportError) as e:
+            if "No module named 'pykeepass" in str(e):
+                if PyKeePass is None:
+                    self.skipTest(f"Test requires pykeepass")
+                else:
+                    raise "pykeepass imported by test but not by config_wrangler"
+            else:
+                raise
+
+    def test_read_sub_keepass_bad1(self):
+        with self.assertRaises(ValueError) as raises_cm:
+            _ = ConfigToTestWith(
+                file_name='test_keepass_bad_missing_sub.ini',
+                start_path=self.get_test_files_path()
+            )
+        exc_str = str(raises_cm.exception)
+        print("Exception str")
+        print(exc_str)
+        self.assertIn('keepass', exc_str)
+        self.assertIn('field required', exc_str)
+
+    def test_read_shared_sub_keepass_bad1(self):
+        with self.assertRaises(ValueError) as raises_cm:
+            _ = ConfigToTestWith(
+                file_name='test_keepass_bad_missing_shared_sub.ini',
+                start_path=self.get_test_files_path()
+            )
+        exc_str = str(raises_cm.exception)
+        print("Exception str")
+        print(exc_str)
+        self.assertIn('keepass', exc_str)
+        self.assertIn('field required', exc_str)
 
     def test_read_keyring_good(self):
         try:

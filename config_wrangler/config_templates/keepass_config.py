@@ -4,7 +4,7 @@ from auto_all import public
 from pydantic import PrivateAttr, root_validator
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_templates.credentials import Credentials, PasswordSource
+from config_wrangler.config_templates.password_source import PasswordSource
 from config_wrangler.config_types.path_types import PathFindUpExpandUser
 
 
@@ -39,6 +39,7 @@ class KeepassConfig(ConfigHierarchy):
             else:
                 credentials_args['user_id'] = 'not-real-userid_config-file'
 
+            from config_wrangler.config_templates.credentials import Credentials
             self._keepass_credentials = Credentials(**credentials_args)
             self.set_as_child('_keepass_credentials', self._keepass_credentials)
             keepass_encryption_password = self._keepass_credentials.get_password()

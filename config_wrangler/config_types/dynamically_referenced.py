@@ -1,9 +1,13 @@
+from typing import TypeVar, Generic
+
 from pydantic import validator
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 
+RefConfigHierarchy = TypeVar('RefConfigHierarchy', bound=ConfigHierarchy)
 
-class DynamicallyReferenced(ConfigHierarchy):
+
+class DynamicallyReferenced(ConfigHierarchy, Generic[RefConfigHierarchy]):
     ref: str
 
     @validator('ref')
