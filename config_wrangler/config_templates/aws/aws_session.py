@@ -9,7 +9,7 @@ except ImportError:
     raise ImportError("S3_Bucket requires boto3 to be installed")
 
 if TYPE_CHECKING:
-    from config_wrangler.config_templates.s3_bucket import S3_Bucket, S3_Bucket_Key, S3_Bucket_Folder
+    from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Key, S3_Bucket_Folder
     try:
         import botostubs
     except ImportError:

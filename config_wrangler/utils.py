@@ -218,7 +218,7 @@ def match_config_data_to_field(
         if create_from_section_names:
             if not hasattr(field.type_, '__fields__'):
                 raise ValueError(f"{full_name(parents, field.alias)} has create_from_section_names but has no fields")
-            assert isinstance(field_value, str)
+            assert isinstance(field_value, str), f"Expected str for {full_name(parents, field.alias)} got {type(field_value)} with value {field_value}"
             section_value = find_referenced_section(
                 field=field,
                 parents=parents,
@@ -377,10 +377,7 @@ def match_config_data_to_field_or_submodel(
         root_config_data: MutableMapping = None,
         parents=None
 ):
-    if inspect.isclass(field.type_):
-        create_from_section_names_default = issubclass(field.type_, DynamicallyReferenced)
-    else:
-        create_from_section_names_default = False
+    create_from_section_names_default = False
     create_from_section_names = field.field_info.extra.get('create_from_section_names', create_from_section_names_default)
 
     if inspect.isclass(field.type_) and issubclass(field.type_, DynamicallyReferenced):

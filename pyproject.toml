@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "config_wrangler"
-version = "0.5.0"
+version = "0.5.1"
 license = "MIT"
 authors = ["Derek Wood"]
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
@@ -27,10 +27,10 @@ s3 = ["boto3"]
 [tool.poetry.dev-dependencies]
 tox = ">=3.24.5"
 tox-run-command = ">=0.4"
-botostubs = ">=0.15.1"
 moto = ">=3.1.9"
 # Optional but required for tests so needed for development
 boto3 = ">=1.23.4"
+botostubs = ">=0.15"
 keyring = "^23.9.3"
 pykeepass = ">4.0.0"
 SQLAlchemy = ">=1.4"
