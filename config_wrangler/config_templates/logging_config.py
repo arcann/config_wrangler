@@ -2,8 +2,8 @@ import logging
 import sys
 from typing import *
 from contextlib import contextmanager
-from datetime import datetime
-from logging.handlers import RotatingFileHandler
+from datetime import datetime, time
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
 
 from pydantic import ByteSize
@@ -25,6 +25,14 @@ class LogLevel(StrEnum):
     NOTSET = auto_str()
 
 
+class FileHandlerClass(StrEnum):
+    # https://docs.python.org/3/library/logging.handlers.html#rotatingfilehandler
+    RotatingFileHandler = auto_str()
+
+    # https://docs.python.org/3/library/logging.handlers.html#timedrotatingfilehandler
+    TimedRotatingFileHandler = auto_str()
+
+
 class LoggingConfig(ConfigHierarchy):
     console_log_level: LogLevel = LogLevel.INFO
     console_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
@@ -34,7 +42,18 @@ class LoggingConfig(ConfigHierarchy):
     log_file_name_date_time_format: str = '_%Y_%m_%d_at_%H_%M_%S'
     file_log_level: LogLevel = LogLevel.DEBUG
     log_file_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
+    log_file_rotation_class: FileHandlerClass = FileHandlerClass.RotatingFileHandler
+
+    # RotatingFileHandler specific settings
+    # https://docs.python.org/3/library/logging.handlers.html#rotatingfilehandler
     log_file_max_size: ByteSize = ByteSize.validate('10 MB').to('b')
+
+    # TimedRotatingFileHandler specific settings
+    # https://docs.python.org/3/library/logging.handlers.html#rotatingfilehandler
+    log_file_timed_rotation_when: str = 'h'
+    log_file_timed_rotation_interval: int = 24
+    log_file_timed_rotation_attime: time = None
+
     log_files_to_keep: int = 10
     logging_date_format: str = '%Y-%m-%d %H:%M:%S%z'
     trace_logging_setup: bool = False
@@ -102,11 +121,25 @@ class LoggingConfig(ConfigHierarchy):
             if dir_name.is_absolute():
                 dir_name.mkdir(parents=True, exist_ok=True)
 
-            file_handler = RotatingFileHandler(filename=log_file_path,
-                                               maxBytes=self.log_file_max_size,
-                                               backupCount=self.log_files_to_keep,
-                                               encoding='utf8',
-                                               )
+            if self.log_file_rotation_class == FileHandlerClass.RotatingFileHandler:
+                file_handler = RotatingFileHandler(
+                    filename=log_file_path,
+                    maxBytes=self.log_file_max_size,
+                    backupCount=self.log_files_to_keep,
+                    encoding='utf8',
+                )
+            elif self.log_file_rotation_class == FileHandlerClass.TimedRotatingFileHandler:
+                file_handler = TimedRotatingFileHandler(
+                    filename=log_file_path,
+                    when=self.log_file_timed_rotation_when,
+                    interval=self.log_file_timed_rotation_interval,
+                    atTime=self.log_file_timed_rotation_attime,
+                    backupCount=self.log_files_to_keep,
+                    encoding='utf8',
+                )
+            else:
+                raise ValueError(f"Bad log_file_rotation_class of {self.log_file_rotation_class}")
+
             log_file_entry_formatter = TZFormatter(self.log_file_entry_format, self.logging_date_format)
             file_handler.setFormatter(log_file_entry_formatter)
             file_handler.setLevel(self.file_log_level)
