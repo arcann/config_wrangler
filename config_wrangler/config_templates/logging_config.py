@@ -36,7 +36,7 @@ class FileHandlerClass(StrEnum):
 class LoggingConfig(ConfigHierarchy):
     console_log_level: LogLevel = LogLevel.INFO
     console_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
-    log_folder: AutoCreateDirectoryPath
+    log_folder: AutoCreateDirectoryPath = None
     log_file_name: str = None
     add_date_to_log_file_name: bool = True
     log_file_name_date_time_format: str = '_%Y_%m_%d_at_%H_%M_%S'
@@ -50,14 +50,30 @@ class LoggingConfig(ConfigHierarchy):
 
     # TimedRotatingFileHandler specific settings
     # https://docs.python.org/3/library/logging.handlers.html#rotatingfilehandler
-    log_file_timed_rotation_when: str = 'h'
-    log_file_timed_rotation_interval: int = 24
+    log_file_timed_rotation_when: str = 'midnight'
+    log_file_timed_rotation_interval: int = 1
     log_file_timed_rotation_attime: time = None
+    """
+    Note: If log_file_timed_rotation_attime is included it must be a valid time
+          with or without seconds:
+             10:00
+             10:30
+             10:45:59
+    Note 2: The time validator will accept a value 0-59 but it is interpreted as seconds 
+            past midnight, not as hours like you might expect.
+    """
+
+    log_file_timed_rotation_utc: bool = False
 
     log_files_to_keep: int = 10
     logging_date_format: str = '%Y-%m-%d %H:%M:%S%z'
     trace_logging_setup: bool = False
     log_levels: Dict[str, LogLevel]
+
+    def _validate_model_(self):
+        if self.log_file_name is not None:
+            if self.log_folder is None:
+                raise ValueError(f"{self.full_item_name()} log_file_name set but no log_folder provided")
 
     @staticmethod
     def get_dated_log_file_name(
@@ -112,7 +128,7 @@ class LoggingConfig(ConfigHierarchy):
                 log_file_path = Path(log_file_name)
 
             if self.trace_logging_setup:
-                log.info('Logging path = {}'.format(log_file_path))
+                log.info(f'Logging path = {log_file_path}')
 
             # Setup file logging
 
@@ -134,6 +150,7 @@ class LoggingConfig(ConfigHierarchy):
                     when=self.log_file_timed_rotation_when,
                     interval=self.log_file_timed_rotation_interval,
                     atTime=self.log_file_timed_rotation_attime,
+                    utc=self.log_file_timed_rotation_utc,
                     backupCount=self.log_files_to_keep,
                     encoding='utf8',
                 )
@@ -144,7 +161,7 @@ class LoggingConfig(ConfigHierarchy):
             file_handler.setFormatter(log_file_entry_formatter)
             file_handler.setLevel(self.file_log_level)
             root_logger.addHandler(file_handler)
-            log.info('File log level = {}'.format(self.file_log_level))
+            log.info(f"File log level = {self.file_log_level}")
         else:
             if self.trace_logging_setup:
                 log.info('No log filename defined. File logging skipped.')
@@ -308,7 +325,7 @@ class LoggingConfig(ConfigHierarchy):
 
             log_level_name = logging.getLevelName(log.getEffectiveLevel())
             if self.trace_logging_setup:
-                log.info('This modules logging level is {}'.format(log_level_name))
+                log.info(f"This modules logging level is {log_level_name}")
 
             if use_log_file_setting or log_file_prefix is not None:
                 return self.add_log_file_handler(
