@@ -38,7 +38,7 @@ class LoggingConfig(ConfigHierarchy):
     console_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
     log_folder: AutoCreateDirectoryPath = None
     log_file_name: str = None
-    add_date_to_log_file_name: bool = True
+    add_date_to_log_file_name: bool = None
     log_file_name_date_time_format: str = '_%Y_%m_%d_at_%H_%M_%S'
     file_log_level: LogLevel = LogLevel.DEBUG
     log_file_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
@@ -111,6 +111,13 @@ class LoggingConfig(ConfigHierarchy):
             else:
                 log_file_name = None
         else:
+            log.info(f'Using code provided prefix {log_file_prefix}')
+            if add_date_to_log_file_name is None:
+                if self.log_file_rotation_class == FileHandlerClass.TimedRotatingFileHandler:
+                    add_date_to_log_file_name = False
+                else:
+                    add_date_to_log_file_name = True
+
             if add_date_to_log_file_name:
                 log_file_name = LoggingConfig.get_dated_log_file_name(
                     log_file_prefix=log_file_prefix,
@@ -118,7 +125,7 @@ class LoggingConfig(ConfigHierarchy):
                     log_file_suffix=log_file_suffix,
                 )
             else:
-                log_file_name = f"{log_file_prefix}.{log_file_suffix}"
+                log_file_name = f"{log_file_prefix}{log_file_suffix}"
 
         file_handler = None
         if log_file_name is not None:
@@ -134,6 +141,8 @@ class LoggingConfig(ConfigHierarchy):
 
             # Make sure the directory exists
             dir_name = log_file_path.parent
+            # TODO: We should mkdir on relative paths as well
+            #       Check only that dir_name is not '.'
             if dir_name.is_absolute():
                 dir_name.mkdir(parents=True, exist_ok=True)
 
@@ -154,6 +163,7 @@ class LoggingConfig(ConfigHierarchy):
                     backupCount=self.log_files_to_keep,
                     encoding='utf8',
                 )
+                file_handler.namer = lambda name: name.replace(".log", "") + ".log"
             else:
                 raise ValueError(f"Bad log_file_rotation_class of {self.log_file_rotation_class}")
 
