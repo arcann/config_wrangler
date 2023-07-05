@@ -66,7 +66,7 @@ class S3_Bucket(AWS_Session):
             transfer_config: Optional[TransferConfig] = None,
     ):
         if transfer_config is None:
-            transfer_config = TransferConfig(multipart_threshold=5* (1024**3)) # 5 GB
+            transfer_config = TransferConfig(multipart_threshold=5* (1024**3))  # 5 GB
 
         self.client.upload_file(
             Filename=str(local_filename),
