@@ -24,9 +24,8 @@ pykeepass = ["pykeepass"]
 redshift = ["boto3"]
 s3 = ["boto3"]
 
-[tool.poetry.dev-dependencies]
-tox = ">=3.24.5"
-tox-run-command = ">=0.4"
+[tool.poetry.group.dev.dependencies]
+tox = "^4.6"
 moto = ">=3.1.9"
 # Optional but required for tests so needed for development
 boto3 = ">=1.23.4"
@@ -35,6 +34,10 @@ keyring = "^23.9.3"
 pykeepass = ">4.0.0"
 SQLAlchemy = ">=1.4"
 
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
 # Required for building docs
 Sphinx = ">=4.5.0,<=5.0"
 sphinx-pydantic = ">=0.1.1"
@@ -43,6 +46,8 @@ sphinx-paramlinks = ">=0.5.4"
 sphinx-sizzle-theme = ">=0.1.1"
 toml = "^0.10.2"
 sphinx-autobuild = "^2021.3.14"
+
+
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
