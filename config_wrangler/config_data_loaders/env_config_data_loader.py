@@ -25,49 +25,53 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
 
         env_vars = {k.lower(): v for k, v in os.environ.items()}
 
-        for field, parents in walk_model(model):
+        for field_name, field_info, parents in walk_model(model):
             env_val: Optional[str] = None
             # Note: field.field_info.extra['env_names'] is set from the 'env' variable on the field or in Config.
             #       See https://pydantic-docs.helpmanual.io/usage/settings/#environment-variable-names
-            if 'env_names' in field.field_info.extra:
-                for env_name in field.field_info.extra['env_names']:
+
+            field_possible_names = [field_info.serialization_alias, field_info.alias, field_name]
+
+            # Search for env var named directly after the field (it would apply to that field in ANY section)
+            for env_name in field_possible_names:
+                if env_name is not None:
                     env_name = self.env_prefix + env_name
                     env_val = env_vars.get(env_name.lower())
                     if env_val is not None:
                         break
 
-            possible_names = ('_', '.', ':')
-
             if env_val is None:
+                possible_name_delim = ('_', '.', ':')
                 possible_env_vars = set()
 
-                for field_name in [field.alias, field.name]:
-                    for delimiter in possible_names:
-                        if field_name:
-                            full_name = delimiter.join(parents + [field_name])
+                for field_name_option in field_possible_names:
+                    for delimiter in possible_name_delim:
+                        if field_name_option:
+                            full_name = delimiter.join(parents + [field_name_option])
                         else:
                             full_name = delimiter.join(parents)
                         env_name = f"{self.env_prefix}{full_name}"
                         if env_name in env_vars:
                             possible_env_vars.add(env_name)
                 if len(possible_env_vars) > 1:
-                    raise ValueError(f"Found multiple matches for {parents} {field}.  They are: {possible_env_vars}")
+                    raise ValueError(f"Found multiple matches for {parents} {field_name} {field_info}.  They are: {possible_env_vars}")
                 elif len(possible_env_vars) == 1:
                     env_var = list(possible_env_vars)[0]
-                    self.log.info(f"Read ENV {env_var} into {parents} {field}.")
+                    self.log.info(f"Read ENV {env_var} into {parents} {field_name} {field_info}")
                     env_val = env_vars[env_var]
 
-            if field.is_complex():
+            if hasattr(field_info.annotation, 'model_fields'):
                 env_val = match_config_data_to_field(
-                    field=field,
+                    field_name=field_name,
+                    field_info=field_info,
                     field_value=env_val,
                     create_from_section_names=False,  # Not yet supported for env
                     parent_container={},
                     root_config_data={},
-                    parents=parents
+                    parents=parents,
                 )
 
-            # Only set the value if it is not already in our config_data
+            # Walk down the hierarchy making nodes as needed
             if env_val is not None:
                 sub_config = config_data
                 for parent in parents:
@@ -77,6 +81,7 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
                         new_sub_config = dict()
                         sub_config[parent] = new_sub_config
                         sub_config = new_sub_config
-                if field.alias not in sub_config:
-                    sub_config[field.alias] = env_val
+                # Only set the value if it is not already in our config_data
+                if field_name not in sub_config:
+                    sub_config[field_name] = env_val
         return config_data

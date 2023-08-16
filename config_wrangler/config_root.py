@@ -1,17 +1,19 @@
 import logging
 from typing import List, Any
 
-from pydantic import PrivateAttr, BaseModel, PydanticValueError
+from pydantic import PrivateAttr, BaseModel
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.credentials import PasswordDefaults
+from config_wrangler.config_wrangler_config import ConfigWranglerConfig
 
+# TODO: How does pydantic 2 use validation errors
 
-class BadValueError(PydanticValueError):
-    msg_template = '{original}. value_provided = {value_str}'
-
-    def __init__(self, original: PydanticValueError, value_str: str) -> None:
-        super().__init__(original=original, value_str=value_str)
+# class BadValueError(PydanticValueError):
+#     msg_template = '{original}. value_provided = {value_str}'
+#
+#     def __init__(self, original: PydanticValueError, value_str: str) -> None:
+#         super().__init__(original=original, value_str=value_str)
 
 
 private_attrs = ('_root_config', '_parents', '_name_map')
@@ -24,16 +26,16 @@ class ConfigRoot(ConfigHierarchy):
     NOTE: Children config items should be instances of
     :py:class:`config_wrangler.config_templates.config_hierarchy.ConfigHierarchy`
     """
-    class Config:
-        validate_all = True
-        validate_assignment = True
-        allow_mutation = True
-        validate_credentials = True
+    model_config = ConfigWranglerConfig(
+        validate_default=True,
+        validate_assignment=True,
+        validate_credentials=True
+    )
 
     _fill_done: bool = PrivateAttr(default=False)
     # _model_validators: PrivateAttr(default=[])
 
-    passwords: PasswordDefaults = None
+    passwords: PasswordDefaults = PasswordDefaults()
     """
     Default configuration for passwords within this config hierarchy.
     """

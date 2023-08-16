@@ -1,6 +1,6 @@
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, List
 
-from pydantic import validator
+from pydantic import field_validator
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 
@@ -10,7 +10,8 @@ RefConfigHierarchy = TypeVar('RefConfigHierarchy', bound=ConfigHierarchy)
 class DynamicallyReferenced(ConfigHierarchy, Generic[RefConfigHierarchy]):
     ref: str
 
-    @validator('ref')
+    @field_validator('ref')
+    @classmethod
     def _validate_phase_1(cls, value):
         if value == '':
             raise ValueError('Blank is not valid for a DynamicallyReferenced section')
@@ -44,3 +45,10 @@ class DynamicallyReferenced(ConfigHierarchy, Generic[RefConfigHierarchy]):
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.ref}) where get_referenced returns {self.get_referenced().__class__.__name__} instance"
+
+
+class ListDynamicallyReferenced(ConfigHierarchy):
+    refs: List[DynamicallyReferenced]
+
+
+ListDynamicallyReferenced()

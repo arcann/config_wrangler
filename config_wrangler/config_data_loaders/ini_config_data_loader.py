@@ -5,13 +5,13 @@ from configparser import RawConfigParser
 from pathlib import Path
 
 from pydantic import BaseModel
-from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE, \
-    SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET
-from pydantic.main import ModelMetaclass
-from pydantic.utils import lenient_issubclass
+# from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE, \
+#     SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET
+# from pydantic.main import ModelMetaclass
 
 from config_wrangler.config_data_loaders.file_config_data_loader import FileConfigDataLoader
-from config_wrangler.utils import full_name
+from config_wrangler.config_types.dynamically_referenced import ListDynamicallyReferenced
+from config_wrangler.utils import full_name, lenient_issubclass
 
 
 class IniConfigDataLoader(FileConfigDataLoader):
@@ -88,31 +88,41 @@ class IniConfigDataLoader(FileConfigDataLoader):
         config_data_dict = config.dict()
         if root_config_data is None:
             root_config_data = config_data_dict
-        for field in config.__fields__.values():
-            field_value = config_data_dict[field.alias]
-            if field.shape == SHAPE_SINGLETON and lenient_issubclass(field.type_, BaseModel):
+        for field_name, field_info in config.model_fields.items():
+            field_name = field_info.alias or field_name
+            field_value = config_data_dict[field_name]
+            if lenient_issubclass(field_info.annotation, BaseModel):
                 section_data = IniConfigDataLoader.prepare_config_data_for_save(
-                    config=getattr(config, field.alias),
-                    parents=parents + [field.alias],
+                    config=getattr(config, field_name),
+                    parents=parents + [field_name],
                     default_delimiter=default_delimiter,
                     root_config_data=root_config_data,
                 )
                 if len(parents) == 0:
-                    root_config_data[field.alias] = section_data
+                    root_config_data[field_name] = section_data
                 else:
                     # Flatten to 2 levels (section + field=value)
-                    section_name = full_name(parents, field.alias)
+                    section_name = full_name(parents, field_name)
                     root_config_data[section_name] = section_data
+            elif lenient_issubclass(field_info.annotation, ListDynamicallyReferenced):
+                section_name_list = []
+                for sub_section_number, sub_section_value in enumerate(getattr(config, field_name)):
+                    sub_section_id = f"{field_name}_{sub_section_number}"
+                    section_name_list.append(sub_section_id)
+                    root_config_data[sub_section_id] = IniConfigDataLoader.prepare_config_data_for_save(
+                        config=sub_section_value,
+                        parents=None,
+                        default_delimiter=default_delimiter,
+                        root_config_data=root_config_data,
+                    )
+                config_data_dict[field_name] = section_name_list
 
-            elif (
-                    field.shape in {SHAPE_LIST, SHAPE_TUPLE, SHAPE_TUPLE_ELLIPSIS, SHAPE_ITERABLE, SHAPE_SEQUENCE}
-                    or field.type_ in {list, tuple}
-            ):
-                create_from_section_names = field.field_info.extra.get('create_from_section_names', False)
+            elif lenient_issubclass(field_info.annotation, (list, tuple)):
+                create_from_section_names = field_info.__dict__.get('create_from_section_names', False)
                 if create_from_section_names:
                     section_name_list = []
-                    for sub_section_number, sub_section_value in enumerate(getattr(config, field.alias)):
-                        sub_section_id = f"{field.alias}_{sub_section_number}"
+                    for sub_section_number, sub_section_value in enumerate(getattr(config, field_name)):
+                        sub_section_id = f"{field_name}_{sub_section_number}"
                         section_name_list.append(sub_section_id)
                         root_config_data[sub_section_id] = IniConfigDataLoader.prepare_config_data_for_save(
                             config=sub_section_value,
@@ -120,20 +130,17 @@ class IniConfigDataLoader(FileConfigDataLoader):
                             default_delimiter=default_delimiter,
                             root_config_data=root_config_data,
                         )
-                    config_data_dict[field.alias] = section_name_list
+                    config_data_dict[field_name] = section_name_list
                 else:
                     value_list = [IniConfigDataLoader.format_value_for_save(v) for v in field_value]
-                    delimiter = field.field_info.extra.get('delimiter', default_delimiter)
-                    config_data_dict[field.alias] = delimiter.join(value_list)
-            elif (
-                    field.shape in {SHAPE_SET, SHAPE_FROZENSET}
-                    or field.type_ in {set, frozenset}
-            ):
+                    delimiter = field_info.extra.get('delimiter', default_delimiter)
+                    config_data_dict[field_name] = delimiter.join(value_list)
+            elif lenient_issubclass(field_info.annotation, (set, frozenset)):
                 value_list = [IniConfigDataLoader.format_value_for_save(v) for v in field_value]
-                delimiter = field.field_info.extra.get('delimiter', default_delimiter)
-                config_data_dict[field.alias] = delimiter.join(value_list)
+                delimiter = field_info.extra.get('delimiter', default_delimiter)
+                config_data_dict[field_name] = delimiter.join(value_list)
             else:
                 # Use python format
-                config_data_dict[field.alias] = IniConfigDataLoader.format_value_for_save(field_value)
+                config_data_dict[field_name] = IniConfigDataLoader.format_value_for_save(field_value)
 
         return config_data_dict

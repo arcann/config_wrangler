@@ -3,7 +3,7 @@ from pathlib import PurePosixPath, Path
 from typing import *
 
 from boto3.s3.transfer import TransferConfig
-from pydantic import PrivateAttr, validator
+from pydantic import field_validator, PrivateAttr
 
 from config_wrangler.config_templates.aws.aws_session import AWS_Session
 
@@ -195,7 +195,8 @@ class S3_Bucket_Folder(S3_Bucket):
     folder: str
 
     # noinspection PyMethodParameters
-    @validator('folder')
+    @field_validator('folder')
+    @classmethod
     def validate_folder(cls, v):
         # Handle pathlib values
         if not isinstance(v, str):
@@ -287,7 +288,8 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
     file_name: str
 
     # noinspection PyMethodParameters
-    @validator('file_name')
+    @field_validator('file_name')
+    @classmethod
     def validate_file_name(cls, v):
         # Handle pathlib values
         if not isinstance(v, str):
@@ -349,7 +351,8 @@ class S3_Bucket_Key(S3_Bucket):
     key: str
 
     # noinspection PyMethodParameters
-    @validator('key')
+    @field_validator('key')
+    @classmethod
     def validate_key(cls, v):
         # Handle pathlib values
         if not isinstance(v, str):

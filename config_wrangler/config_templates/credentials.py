@@ -1,14 +1,12 @@
 import warnings
-from typing import *
+from typing import Optional
 
-import pydantic.typing
-from pydantic import PrivateAttr, root_validator
+from pydantic import PrivateAttr, model_validator, Field
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from config_wrangler.config_templates.password_defaults import PasswordDefaults
-from config_wrangler.config_templates.password_source import PasswordSource
-from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
+from config_wrangler.config_templates.password_source import PasswordSource, PasswordSourceValidated
 
 __all__ = ['Credentials', 'PasswordDefaults', 'PasswordSource']
 
@@ -19,20 +17,20 @@ class Credentials(ConfigHierarchy):
     The user ID to use
     """
 
-    password_source: PasswordSource = None
+    password_source: Optional[PasswordSourceValidated] = None
     """
     The source to use when getting a password for the user.  
     See :py:class:`PasswordSource` for valid values.
     """
 
-    raw_password: str = None
+    raw_password: Optional[str] = Field(repr=False, default=None)
     """
     This is only used for the extremely non-secure `CONFIG_FILE` password source.
     The password is stored directly in the config file next to the user_id with
     the setting name `raw_password`
     """
 
-    keyring_section: str = None
+    keyring_section: Optional[str] = None
     """
     If the password_source is KEYRING, then which section (AKA system)
     should this module look for the password in.
@@ -40,19 +38,19 @@ class Credentials(ConfigHierarchy):
     See https://pypi.org/project/keyring/
     or https://github.com/jaraco/keyring
     """
-    keepass_config: str = 'keepass'
+    keepass_config: Optional[str] = 'keepass'
     """
     If the password_source is KEEPASS, then which root level config item contains
     the settings for Keepass (must be an instance of 
     :py:class:`config_wrangler.config_templates.keepass_config.KeepassConfig`)
     """
-    keepass: KeepassConfig = None
+    keepass: Optional[KeepassConfig] = None
     """
     If the password_source is KEEPASS, then load a sub-section with the 
     :py:class:`config_wrangler.config_templates.keepass_config.KeepassConfig`) settings
     """
 
-    keepass_group: str = None
+    keepass_group: Optional[str] = None
     """
     If the password_source is KEEPASS, which group in the Keepass database should
     be searched for an entry with a matching entry.
@@ -61,7 +59,7 @@ class Credentials(ConfigHierarchy):
     If that is also None, then a ValueError will be raised.
     """
 
-    keepass_title: str = None
+    keepass_title: Optional[str] = None
     """
     If the password_source is KEEPASS, this is an optional filter on the title
     of the keepass entries in the group.
@@ -199,62 +197,36 @@ class Credentials(ConfigHierarchy):
 
         return password
 
-    @root_validator
-    def check_password(cls, values):
-        if 'password_source' in values:
-            if values['password_source'] is not None:
-                values['password_source'] = values['password_source'].upper()
-
-        user_id = values.get('user_id')
+    @model_validator(mode='after')
+    def check_password(self):
+        user_id = self.user_id
+        cls = self.__class__
         if user_id == '' or user_id is None:
             if cls.__name__ == 'SQLAlchemyDatabase':
-                if values.get('dialect') == 'sqlite':
+                if self.dialect == 'sqlite':
                     # Bypass password checks
-                    return values
+                    return self
             raise ValueError("user_id not provided")
 
-        if values.get('password_source') == PasswordSource.KEYRING:
-            keyring_section = values.get('keyring_section')
+        if self.password_source == PasswordSource.KEYRING:
+            keyring_section = self.keyring_section
             if keyring_section is None:
-                raise ValueError(f"{values} keyring_section is None but password_source was keyring")
-        elif values.get('password_source') == PasswordSource.CONFIG_FILE:
-            password = values.get('raw_password')
+                raise ValueError(f"{self} keyring_section is None but password_source was keyring")
+        elif self.password_source == PasswordSource.CONFIG_FILE:
+            password = self.raw_password
             if password is None or password == '':
-                raise ValueError(f"{values} password_source is Config but password is not set")
-        return values
+                raise ValueError(f"{self} password_source is Config but password is not set")
 
-    def _validate_model_password(self):
         if self._root_config is None:
-            raise ValueError("_validate_model_password called on Credentials that are not part of a ConfigRoot hierarchy")
-        if self._root_config.Config.validate_all and self.validate_password_on_load:
-            config = self._root_config.Config
-            validate_passwords = getattr(config, 'validate_passwords', True)
-            if validate_passwords:
+            if self.validate_password_on_load:
                 _ = self.get_password()
+        else:
+            model_config = self._root_config.Config
+            if model_config.validate_default and model_config.validate_credentials and self.validate_password_on_load:
+                config = self._root_config.Config
+                validate_passwords = getattr(config, 'validate_passwords', True)
+                if validate_passwords:
+                    _ = self.get_password()
 
-    def _iter(
-            self,
-            to_dict: bool = False,
-            by_alias: bool = False,
-            include: Union['pydantic.typing.AbstractSetIntStr', 'pydantic.typing.MappingIntStrAny'] = None,
-            exclude: Union['pydantic.typing.AbstractSetIntStr', 'pydantic.typing.MappingIntStrAny'] = None,
-            exclude_unset: bool = False,
-            exclude_defaults: bool = False,
-            exclude_none: bool = False,
-    ) -> 'pydantic.typing.TupleGenerator':
-        """
-        Iterate through the values, but hide any password (_private_value_atts)
-        values in this output.  Passwords should be directly accessed by attribute name.
-        """
-        for key, value in super()._iter(
-            to_dict=to_dict,
-            by_alias=by_alias,
-            include=include,
-            exclude=exclude,
-            exclude_unset=exclude_unset,
-            exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none,
-        ):
-            if key in self._private_value_atts and value is not None:
-                value = '*' * 8
-            yield key, value
+        return self
+

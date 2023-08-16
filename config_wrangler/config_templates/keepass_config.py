@@ -1,10 +1,10 @@
 from typing import *
 
 from auto_all import public
-from pydantic import PrivateAttr, root_validator
+from pydantic import PrivateAttr
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_templates.password_source import PasswordSource
+from config_wrangler.config_templates.password_source import PasswordSource, PasswordSourceValidated
 from config_wrangler.config_types.path_types import PathFindUpExpandUser
 
 
@@ -12,7 +12,7 @@ from config_wrangler.config_types.path_types import PathFindUpExpandUser
 class KeepassConfig(ConfigHierarchy):
     database_path: PathFindUpExpandUser
     default_group: str = None
-    password_source: PasswordSource = PasswordSource.KEYRING
+    password_source: PasswordSourceValidated = PasswordSource.KEYRING
     raw_password: str = None
     keyring_section: str = None
     keyring_user_id: str = None
@@ -21,13 +21,6 @@ class KeepassConfig(ConfigHierarchy):
     _db = PrivateAttr(default=None)
     _alternate_group_names_lower = PrivateAttr(default=None)
     _keepass_credentials = PrivateAttr(default=None)
-
-    @root_validator
-    def check_password(cls, values):
-        if 'password_source' in values:
-            if values['password_source'] is not None:
-                values['password_source'] = values['password_source'].upper()
-        return values
 
     def open_database(self) -> 'pykeepass.PyKeePass':
         if self._db is None:
@@ -41,7 +34,7 @@ class KeepassConfig(ConfigHierarchy):
 
             from config_wrangler.config_templates.credentials import Credentials
             self._keepass_credentials = Credentials(**credentials_args)
-            self.set_as_child('_keepass_credentials', self._keepass_credentials)
+            self.add_child('_keepass_credentials', self._keepass_credentials)
             keepass_encryption_password = self._keepass_credentials.get_password()
             try:
                 self._db = PyKeePass(self.database_path, password=keepass_encryption_password)

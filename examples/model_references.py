@@ -1,26 +1,24 @@
 from typing import *
 
-from pydantic import Field
-
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
-from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket
+from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.config_types.delimited_field import DelimitedListField
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
 
 
 # noinspection PyPep8Naming
 class Bucket_Compare_Section(ConfigHierarchy):
     buckets_to_compare: List[DynamicallyReferenced]
-    buckets_to_compare_nl: List[DynamicallyReferenced] = Field(delimiter='\n')
+    buckets_to_compare_nl: List[DynamicallyReferenced] = DelimitedListField(delimiter='\n')
     compare_results_output: str
 
 
 class BucketCompareConfig(ConfigFromIniEnv):
 
     class Config:
-        validate_all = True
+        validate_default = True
         validate_assignment = True
-        allow_mutation = True
 
     bucket_1: S3_Bucket
 

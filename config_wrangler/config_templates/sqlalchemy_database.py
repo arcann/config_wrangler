@@ -2,7 +2,7 @@ import logging
 from typing import *
 from datetime import datetime, timedelta, timezone
 
-from pydantic import PrivateAttr, root_validator
+from pydantic import model_validator, PrivateAttr
 
 
 try:
@@ -60,7 +60,8 @@ class SQLAlchemyDatabase(Credentials):
     def __str__(self):
         return str(self.get_uri())
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
+    @classmethod
     def translate(cls, values):
         # Convert from old setting names to new names
         name_map = {
@@ -71,6 +72,7 @@ class SQLAlchemyDatabase(Credentials):
         }
         for old, new in name_map.items():
             if old in values and new not in values:
+                # TODO: Add warn of depracation
                 values[new] = values[old]
                 del values[old]
 

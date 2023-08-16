@@ -13,7 +13,7 @@ class BaseConfigDataLoader:
             self._init_config_data = dict(**kwargs).update(config_data_dict)
 
     def _apply_types(self, config_data, model: BaseModel) -> MutableMapping:
-        for field in model.__fields__.values():
+        for field in model.model_fields.values():
             self.log.debug(field.alias)
             # if field.is_complex():
             #     raise NotImplementedError

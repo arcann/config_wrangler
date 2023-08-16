@@ -6,7 +6,7 @@ from datetime import datetime, time
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
 
-from pydantic import ByteSize
+from pydantic import ByteSize, Field
 from pydicti import Dicti
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
@@ -46,7 +46,7 @@ class LoggingConfig(ConfigHierarchy):
 
     # RotatingFileHandler specific settings
     # https://docs.python.org/3/library/logging.handlers.html#rotatingfilehandler
-    log_file_max_size: ByteSize = ByteSize.validate('10 MB').to('b')
+    log_file_max_size: ByteSize = Field(default='10 MB', validate_default=True)
 
     # TimedRotatingFileHandler specific settings
     # https://docs.python.org/3/library/logging.handlers.html#rotatingfilehandler

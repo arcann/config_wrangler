@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "config_wrangler"
-version = "0.5.5"
+version = "1.0.0a"
 license = "MIT"
 authors = ["Derek Wood"]
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
@@ -10,13 +10,15 @@ repository = "https://github.com/arcann/config_wrangler"
 
 [tool.poetry.dependencies]
 python = ">=3.7, <4.0.0"
-pydantic = "^1.10.11"
+pydantic = ">=2.1"
 StrEnum = "^0.4.7"
 SQLAlchemy = {version = ">=1.4", optional = true}
-boto3 = {version = ">=1.21", optional = true}
+# Keep boto3 fairly current to avoid scanning a huge list of versions
+boto3 = {version = ">=1.26", optional = true}
 pykeepass = {version = ">=4.0.0", optional = true}
 auto-all = "^1.4.1"
 pydicti = "^1.1.6"
+typing-extensions = ">=4.5.0"
 
 [tool.poetry.extras]
 sqlalchemy = ["SQLAlchemy"]

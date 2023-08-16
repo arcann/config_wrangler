@@ -7,7 +7,7 @@ config.ini
 .. code-block:: ini
 
     [S3_Source]
-    bucket_name=my.exmple-bucket
+    bucket_name=my.example-bucket
     key_prefixes=processed/
     user_id=AK123456789ABC
     # Not a secure way to store the password, but OK for local prototype or examples.
@@ -100,12 +100,12 @@ python code
         my_list_auto_pipe: list
         my_list_python: list
         my_list_json: list
-        my_list_c: list = Field(delimiter=',')
-        my_list_nl: list = Field(delimiter='\n')
-        my_list_int_c: typing.List[int] = Field(delimiter=',')
-        my_tuple_c: tuple = Field(delimiter=',')
-        my_tuple_nl: tuple = Field(delimiter='\n')
-        my_tuple_int_c: typing.Tuple[int, int, int] = Field(delimiter=',')
+        my_list_c: list = DelimitedListField(delimiter=',')
+        my_list_nl: list = DelimitedListField(delimiter='\n')
+        my_list_int_c: typing.List[int] = DelimitedListField(delimiter=',')
+        my_tuple_c: tuple = DelimitedListField(delimiter=',')
+        my_tuple_nl: tuple = DelimitedListField(delimiter='\n')
+        my_tuple_int_c: typing.Tuple[int, int, int] = DelimitedListField(delimiter=',')
         my_dict: dict
         my_dict_str_int: typing.Dict[str, int]
         my_set: set
@@ -120,9 +120,8 @@ python code
 
     class ETLConfig(ConfigFromIniEnv):
         class Config:
-            validate_all = True
+            validate_default = True
             validate_assignment = True
-            allow_mutation = True
 
         target_database: SQLAlchemyDatabase
 
@@ -196,7 +195,7 @@ python code
             print(f"  bucket search prefix = {prefix}")
         # > Getting S3 Data
         # > credentials.py:56: UserWarning: Passwords stored directly in config or worse in code are not safe. Please make sure to fix this before deploying.
-        # > S3 bucket definitition = s3.Bucket(name='my.exmple-bucket')
+        # > S3 bucket definition = s3.Bucket(name='my.example-bucket')
         # > bucket search prefix = processed/
 
 

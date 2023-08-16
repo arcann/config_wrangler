@@ -1,18 +1,19 @@
 import json
 import os
-from typing import *
 import unittest
 from datetime import date, time, datetime
+from typing import *
 from unittest import mock
 
 import pydantic
 from pydantic import Field, AnyHttpUrl, DirectoryPath
+from pydantic_core import Url
 
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_templates.credentials import PasswordDefaults
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
+from config_wrangler.config_types.delimited_field import DelimitedListField
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
@@ -34,12 +35,12 @@ class TestSection(ConfigHierarchy):
     my_list_auto_pipe: list
     my_list_python: list
     my_list_json: list
-    my_list_c: list = Field(delimiter=',')
-    my_list_nl: list = Field(delimiter='\n')
-    my_list_int_c: List[int] = Field(delimiter=',')
-    my_tuple_c: tuple = Field(delimiter=',')
-    my_tuple_nl: tuple = Field(delimiter='\n')
-    my_tuple_int_c: Tuple[int, int, int] = Field(delimiter=',')
+    my_list_c: list = DelimitedListField(delimiter=',')
+    my_list_nl: list = DelimitedListField(delimiter='\n')
+    my_list_int_c: List[int] = DelimitedListField(delimiter=',')
+    my_tuple_c: tuple = DelimitedListField(delimiter=',')
+    my_tuple_nl: tuple = DelimitedListField(delimiter='\n')
+    my_tuple_int_c: Tuple[int, int, int] = DelimitedListField(delimiter=',')
     my_dict: dict
     my_dict_str_int: Dict[str, int]
     my_set: set
@@ -60,9 +61,8 @@ class TestSection(ConfigHierarchy):
 class ConfigToTestWith(ConfigFromIniEnv):
 
     class Config:
-        validate_all = True
+        validate_default = False
         validate_assignment = True
-        allow_mutation = True
 
     target_database: SQLAlchemyDatabase
 
@@ -94,7 +94,10 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         self.test_files_path = self.get_test_files_path()
 
     def tearDown(self):
-        pass
+        try:
+            del os.environ['test_settings_config_files_path']
+        except KeyError:
+            pass
 
     def _test_simple_example_config(self, config):
         test_val = config.test_section.my_int
@@ -193,8 +196,8 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         self.assertIsInstance(test_val, datetime)
 
         test_val = config.test_section.my_url
-        self.assertEqual(test_val, 'https://localhost:6553/')
-        self.assertIsInstance(test_val, str)
+        self.assertEqual(test_val, Url('https://localhost:6553/'))
+        self.assertIsInstance(test_val, Url)
 
         self.assertEqual(config.test_section.double_interpolate, 'My DB is in ./example_db')
 
@@ -238,14 +241,14 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
             _ = ConfigToTestWith(file_name='test_good.ini')
 
     def test_read_no_password(self):
-        with self.assertRaises(pydantic.error_wrappers.ValidationError):
+        with self.assertRaises(pydantic.ValidationError):
             _ = ConfigToTestWith(
                 file_name='test_no_pw.ini',
                 start_path=self.get_test_files_path()
             )
 
     def test_missing_section(self):
-        with self.assertRaises(pydantic.error_wrappers.ValidationError):
+        with self.assertRaises(pydantic.ValidationError):
             _ = ConfigToTestWith(
                 file_name='test_no_pw.ini',
                 start_path=self.get_test_files_path()
@@ -291,10 +294,9 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         exc_str = str(raises_cm.exception)
         print("Exception str")
         print(exc_str)
-        self.assertIn('Section required', exc_str)
-        self.assertIn('test_settings', exc_str)
-        self.assertIn('keepass', exc_str)
-        self.assertIn('database', exc_str)
+        self.assertIn('Field required', exc_str)
+        self.assertIn('database_path', exc_str)
+        self.assertIn('KeepassConfig', exc_str)
 
     def test_read_keepass_bad_values(self):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
@@ -427,8 +429,8 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         exc_str = str(raises_cm.exception)
         print("Exception str")
         print(exc_str)
-        self.assertIn('keepass', exc_str)
-        self.assertIn('field required', exc_str)
+        self.assertIn('KeepassConfig', exc_str)
+        self.assertIn('Field required', exc_str)
 
     def test_read_shared_sub_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
@@ -439,8 +441,8 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         exc_str = str(raises_cm.exception)
         print("Exception str")
         print(exc_str)
-        self.assertIn('keepass', exc_str)
-        self.assertIn('field required', exc_str)
+        self.assertIn('KeepassConfig', exc_str)
+        self.assertIn('Field required', exc_str)
 
     def test_read_keyring_good(self):
         try:

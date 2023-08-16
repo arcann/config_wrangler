@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 from config_wrangler.config_templates.credentials import Credentials
 
 
+# AWSSession does not look right
+# noinspection PyPep8Naming
 class AWS_Session(Credentials):
     region_name: str = None
 
@@ -68,15 +70,15 @@ class AWS_Session(Credentials):
     def get_copy(self, copied_by: str = 'get_copy') -> 'AWS_Session':
         return self._factory(cls=self.__class__)
 
-    def _factory(self, cls, exclude: set = None, **attributes):
+    def _factory(self, cls, exclude: Set[str] = None, **attributes):
         if exclude is None:
             exclude = set()
         exclude.update(attributes.keys())
-        new_object = cls(
+        new_object = cls.model_construct(
             **attributes,
             **self._dict_for_init(exclude=exclude)
         )
-        self.set_as_child(str(cls), new_object)
+        self.add_child(str(cls), new_object)
         if self.has_session:
             new_object.set_session(self.session)
         return new_object

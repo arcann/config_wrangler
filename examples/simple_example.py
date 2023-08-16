@@ -7,6 +7,7 @@ from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
+from config_wrangler.config_types.delimited_field import DelimitedListField
 from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
 
 
@@ -32,12 +33,12 @@ class TestSection(ConfigHierarchy):
     my_list_auto_pipe: list
     my_list_python: list
     my_list_json: list
-    my_list_c: list = Field(delimiter=',')
-    my_list_nl: list = Field(delimiter='\n')
-    my_list_int_c: List[int] = Field(delimiter=',')
-    my_tuple_c: tuple = Field(delimiter=',')
-    my_tuple_nl: tuple = Field(delimiter='\n')
-    my_tuple_int_c: Tuple[int, int, int] = Field(delimiter=',')
+    my_list_c: list = DelimitedListField(delimiter=',')
+    my_list_nl: list = DelimitedListField(delimiter='\n')
+    my_list_int_c: List[int] = DelimitedListField(delimiter=',')
+    my_tuple_c: tuple = DelimitedListField(delimiter=',')
+    my_tuple_nl: tuple = DelimitedListField(delimiter='\n')
+    my_tuple_int_c: Tuple[int, int, int] = DelimitedListField(delimiter=',')
     my_dict: dict
     my_dict_str_int: Dict[str, int]
     my_set: set
@@ -54,9 +55,8 @@ class TestSection(ConfigHierarchy):
 class ETLConfig(ConfigFromIniEnv):
 
     class Config:
-        validate_all = True
+        validate_default = True
         validate_assignment = True
-        allow_mutation = True
 
     target_database: SQLAlchemyDatabase
 

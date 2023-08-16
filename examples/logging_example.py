@@ -28,9 +28,8 @@ class TestSection(ConfigHierarchy):
 class LoggingExampleConfig(ConfigFromIniEnv):
 
     class Config:
-        validate_all = True
+        validate_default = True
         validate_assignment = True
-        allow_mutation = True
 
     test_section: TestSection
 

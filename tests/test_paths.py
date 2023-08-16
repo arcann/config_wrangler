@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.path_types import (
     PathExpandUser, DirectoryExpandUser, AutoCreateDirectoryPath,
-    AutoCreateDirectory, PathFindUp, DirectoryFindUp, PathFindUpExpandUser, DirectoryFindUpExpandUser, ExecutablePath,
+    PathFindUp, DirectoryFindUp, PathFindUpExpandUser, DirectoryFindUpExpandUser, ExecutablePath,
 )
 
 
@@ -79,7 +79,7 @@ class TestIniParse(unittest.TestCase):
 
     def test_autocreate_dir_expand_user(self):
         class TestConfig(ConfigHierarchy):
-            exp_user_path: AutoCreateDirectory
+            exp_user_path: AutoCreateDirectoryPath
 
         with TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -109,7 +109,7 @@ class TestIniParse(unittest.TestCase):
 
     def test_autocreate_dir_expand_user_invalid(self):
         class TestConfig(ConfigHierarchy):
-            exp_user_path: AutoCreateDirectory
+            exp_user_path: AutoCreateDirectoryPath
 
         with TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -122,7 +122,7 @@ class TestIniParse(unittest.TestCase):
 
     def test_autocreate_dir_abs(self):
         class TestConfig(ConfigHierarchy):
-            abs_path: AutoCreateDirectory
+            abs_path: AutoCreateDirectoryPath
 
         with TemporaryDirectory() as tmp_dir:
             actual_dir = Path(tmp_dir) / "sub_dir"

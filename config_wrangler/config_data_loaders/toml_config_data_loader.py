@@ -4,11 +4,11 @@ from enum import Enum
 from pathlib import Path
 
 from pydantic import BaseModel
-from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE, \
-    SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET
-from pydantic.utils import lenient_issubclass
+# from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE, \
+#     SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET
 
 from config_wrangler.config_data_loaders.file_config_data_loader import FileConfigDataLoader
+from config_wrangler.utils import lenient_issubclass
 
 
 class TomlConfigDataLoader(FileConfigDataLoader):
@@ -81,7 +81,7 @@ class TomlConfigDataLoader(FileConfigDataLoader):
         if parents is None:
             parents = []
         toml_data_dict = config.dict()
-        for field in config.__fields__.values():
+        for field in config.model_fields.values():
             field_value = toml_data_dict[field.alias]
             if field.shape == SHAPE_SINGLETON and lenient_issubclass(field.type_, BaseModel):
                 toml_data_dict[field.alias] = TomlConfigDataLoader.prepare_config_data_for_save(
