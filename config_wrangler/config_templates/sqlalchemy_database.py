@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import *
 from datetime import datetime, timedelta, timezone
 
@@ -72,7 +73,7 @@ class SQLAlchemyDatabase(Credentials):
         }
         for old, new in name_map.items():
             if old in values and new not in values:
-                # TODO: Add warn of depracation
+                warnings.warn(f"Config SQLAlchemyDatabase.{old} is deprecated. Use {new} instead.")
                 values[new] = values[old]
                 del values[old]
 

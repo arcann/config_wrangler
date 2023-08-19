@@ -1,5 +1,7 @@
+import ast
+import inspect
 import logging
-from typing import List, Any
+from typing import List, Any, Type
 
 from pydantic import PrivateAttr, BaseModel
 
@@ -75,6 +77,26 @@ class ConfigRoot(ConfigHierarchy):
                     errors=errors
                 )
 
+    # @staticmethod
+    # def get_decorators(cls: Type):
+    #     target = cls
+    #     decorators = {}
+    #
+    #     def visit_function(node):
+    #         decorators[node.name] = []
+    #         for n in node.decorator_list:
+    #             if isinstance(n, ast.Call):
+    #                 name = n.func.attr if isinstance(n.func, ast.Attribute) else n.func.id
+    #             else:
+    #                 name = n.attr if isinstance(n, ast.Attribute) else n.id
+    #
+    #             decorators[node.name].append(name)
+    #
+    #     node_iter = ast.NodeVisitor()
+    #     node_iter.visit_FunctionDef = visit_function
+    #     node_iter.visit(ast.parse(inspect.getsource(target)))
+    #     return decorators
+
     def fill_hierarchy(
             self,
             model_level: BaseModel,
@@ -102,13 +124,16 @@ class ConfigRoot(ConfigHierarchy):
 
         # Run any model level validators
         for attr in dir(model_level):
+            # TODO: Find a better way to identify these ConfigHierarchy validators
+            #       See get_decorators
+            #       Or maybe decorator adds itself to ConfigHierarchy _config_hierarchy_validators = PrivateAttr(default=[])
             if attr.startswith('_validate_model_'):
                 method = getattr(model_level, attr)
                 if callable(method):
                     try:
                         method()
                     except (ValueError, TypeError, AssertionError) as exc:
-                        errors.add(repr(exc))
+                        errors.add(f"Failed check {parents} {attr} with {repr(exc)}")
 
     def validate_model(self):
         errors = set()

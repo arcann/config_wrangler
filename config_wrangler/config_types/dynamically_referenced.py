@@ -7,7 +7,13 @@ from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 RefConfigHierarchy = TypeVar('RefConfigHierarchy', bound=ConfigHierarchy)
 
 
-class DynamicallyReferenced(ConfigHierarchy, Generic[RefConfigHierarchy]):
+class DynamicallyReferenced(ConfigHierarchy):
+    """
+    Represents a reference to a statically defined section of the config.
+    The data type of the section can be any subclass of ConfigHierarchy.
+    The validator will check that the reference exists.
+    """
+    # TODO: validator will check that the reference exists.
     ref: str
 
     @field_validator('ref')
@@ -17,6 +23,7 @@ class DynamicallyReferenced(ConfigHierarchy, Generic[RefConfigHierarchy]):
             raise ValueError('Blank is not valid for a DynamicallyReferenced section')
         return value
 
+    # TODO: Change to _config_hierarchy_validators decorator
     def _validate_model_reference(self):
         _ = self.get_referenced()
 
@@ -37,7 +44,7 @@ class DynamicallyReferenced(ConfigHierarchy, Generic[RefConfigHierarchy]):
                 try:
                     model = getattr(model, part)
                 except AttributeError:
-                    raise ValueError(f"{self.ref} not found.")
+                    raise ValueError(f"Referenced section {self.ref} not found in model.")
             return model
 
     def __str__(self):
@@ -49,6 +56,3 @@ class DynamicallyReferenced(ConfigHierarchy, Generic[RefConfigHierarchy]):
 
 class ListDynamicallyReferenced(ConfigHierarchy):
     refs: List[DynamicallyReferenced]
-
-
-ListDynamicallyReferenced()

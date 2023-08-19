@@ -1,5 +1,4 @@
 import ast
-import inspect
 import json
 import logging
 import re
@@ -7,16 +6,16 @@ import types
 from datetime import timezone, datetime
 from typing import *
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic.fields import FieldInfo
 from pydicti import dicti, Dicti
 
 from config_wrangler.config_exception import ConfigError
 from config_wrangler.config_types.delimited_field import DelimitedListFieldInfo
-from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced, ListDynamicallyReferenced
+from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
 
 
-# Moved here because  Pydantic V2 depracated it
+# Moved here because  Pydantic V2 deprecated it
 def lenient_issubclass(
         cls: Any,
         class_or_tuple: Union[Type[Any], Tuple[Type[Any], ...], Set[Type[Any]], None]
@@ -46,20 +45,8 @@ def lenient_issubclass(
         raise
 
 
-def has_sub_fields(field_info: FieldInfo):
-    return hasattr(field_info.annotation, 'model_fields')
-
-
-def get_one_sub_field(field_info: FieldInfo) -> Tuple[str, FieldInfo]:
-    try:
-        # noinspection PyUnresolvedReferences
-        model_fields = field_info.annotation.model_fields
-    except AttributeError:
-        raise ValueError(f"{field_info} is not a sub model")
-    fields_list = list(model_fields.keys())
-    if len(fields_list) != 1:
-        raise ValueError(f"{field_info} has more than one field {fields_list}")
-    return fields_list[0], model_fields[fields_list[0]]
+def has_sub_fields(inner_type: Type):
+    return hasattr(inner_type, 'model_fields')
 
 
 class TZFormatter(logging.Formatter):
@@ -253,7 +240,7 @@ def find_referenced_section(
                 parts_used.append(tuple(section_name_2,))
                 inherit_fill(root_dict[section_name_2], section_value)
             elif section_name_2 in current_dict:
-                parts_used.append(tuple(*parents, section_name_2,))
+                parts_used.append((*parents, section_name_2,))
                 inherit_fill(current_dict[section_name_2], section_value)
         if inherit:
             inherit_fill(current_dict, section_value)
@@ -266,100 +253,155 @@ def find_referenced_section(
         return section_name
 
 
+def build_referenced_objects(
+    field_name: str,
+    field_info: FieldInfo,
+    parents: List[str],
+    parent_container: MutableMapping,
+    root_config_data: MutableMapping,
+    list_of_sections: Sequence[str],
+    inner_type: type[BaseModel],
+) -> Dict[str, BaseModel]:
+    section_name = None
+    try:
+        section_contents = dict()
+        for section_name in list_of_sections:
+            # For DynamicallyReferenced we don't use the full value returned
+            # here, but this helps us by validating the reference
+            ref_section_value = find_referenced_section(
+                field_name=field_name,
+                field_info=field_info,
+                parents=parents,
+                section_name=section_name,
+                current_dict=parent_container,
+                root_dict=root_config_data,
+            )
+            if issubclass(inner_type, DynamicallyReferenced):
+                # In the case of DynamicallyReferenced it refers to an existing static instance,
+                # so we don't build a new instance, we instead just store the pointer.
+                inner_type_instance = DynamicallyReferenced(ref=section_name)
+            else:
+                inner_type_instance = inner_type(**ref_section_value)
+            section_contents[section_name] = inner_type_instance
+        return section_contents
+    except ValidationError as e:
+        raise ValueError(f"Field {full_name(parents, field_name)} error on section {section_name} = {repr(e)})")
+
+
 def match_config_data_to_field(
         field_name: str,
         field_info: FieldInfo,
         field_value: object,
-        create_from_section_names: bool,
         parent_container: MutableMapping,
         root_config_data: MutableMapping,
         parents: List[str],
 ):
     if lenient_issubclass(field_info.annotation, (str, int, float)):
-        if create_from_section_names:
-            if not hasattr(field_info.annotation, 'model_fields'):
-                raise ValueError(f"{full_name(parents, field_name)} has create_from_section_names but has no fields")
-            assert isinstance(field_value, str), f"Expected str for {full_name(parents, field_name)} got {type(field_value)} with value {field_value}"
-            section_value = find_referenced_section(
-                field_name=field_name,
-                field_info=field_info,
-                parents=parents,
-                section_name=field_value,
-                current_dict=parent_container,
-                root_dict=root_config_data,
-            )
-            section_value['config_source_name'] = field_value
-            field_value = section_value
-    elif lenient_issubclass(field_info.annotation, {list, tuple}):
+        pass
+    elif lenient_issubclass(field_info.annotation, list):
         if isinstance(field_value, str):
             field_value = parse_delimited_list(field_name, field_info, field_value)
 
-        # Conditional change to field_value to obtain value from another config section
-        if create_from_section_names:
-            if not hasattr(field_info.annotation, 'model_fields'):
-                raise ValueError(f"{full_name(parents, field_name)} has create_from_section_names but has no fields")
-
-            section_contents = list()
-            for section_name in field_value:
-                ref_section_value = find_referenced_section(
+        inner_type_args = get_args(field_info.annotation)
+        if len(inner_type_args) > 1:
+            raise SyntaxError(
+                f"{full_name(parents, field_name)} has type {field_info.annotation} "
+                f"with more than one inner type {inner_type_args}"
+            )
+        elif len(inner_type_args) == 1:
+            inner_type = inner_type_args[0]
+            if has_sub_fields(inner_type):
+                ref_object_dict = build_referenced_objects(
                     field_name=field_name,
                     field_info=field_info,
                     parents=parents,
-                    section_name=section_name,
-                    current_dict=parent_container,
-                    root_dict=root_config_data,
+                    parent_container=parent_container,
+                    root_config_data=root_config_data,
+                    list_of_sections=field_value,
+                    inner_type=inner_type,
                 )
-                # Transform section_value as needed
-                # noinspection PyUnresolvedReferences
+                field_value = list(ref_object_dict.values())
+    elif lenient_issubclass(field_info.annotation, tuple):
+        if isinstance(field_value, str):
+            field_value = parse_delimited_list(field_name, field_info, field_value)
 
-                for sub_field_name, sub_field_info in field_info.annotation.model_fields.items():
-                    sub_section_value = match_config_data_to_field_or_submodel(
-                        field_name=sub_field_name,
-                        field_info=sub_field_info,
-                        parent_container={sub_field_name: ref_section_value},
+        # See docs for Tuple annotations
+        # https://docs.python.org/3/library/typing.html#annotating-tuples
+        inner_type_args = get_args(field_info.annotation)
+        if len(inner_type_args) == 0:
+            # Nothing to do for untyped tuple container
+            pass
+        elif len(inner_type_args) == 2 and inner_type_args[1] == Ellipsis:
+            inner_type = inner_type_args[0]
+            if has_sub_fields(inner_type):
+                ref_object_dict = build_referenced_objects(
+                    field_name=field_name,
+                    field_info=field_info,
+                    parents=parents,
+                    parent_container=parent_container,
+                    root_config_data=root_config_data,
+                    list_of_sections=field_value,
+                    inner_type=inner_type,
+                )
+                field_value = list(ref_object_dict.values())
+        elif len(inner_type_args) != len(field_value):
+            raise ValueError(
+                f"{full_name(parents, field_name)} has type {field_info.annotation} "
+                f"expects {len(inner_type_args)} values but got {len(field_value)} values."
+            )
+        else:
+            new_field_values = list()
+            for inner_type, value in zip(inner_type_args, field_value):
+                if has_sub_fields(inner_type):
+                    ref_object_dict = build_referenced_objects(
+                        field_name=field_name,
+                        field_info=field_info,
+                        parents=parents,
+                        parent_container=parent_container,
                         root_config_data=root_config_data,
-                        parents=parents + [field_name, section_name]
+                        list_of_sections=[value],
+                        inner_type=inner_type,
                     )
-                    ref_section_value[sub_field_name] = sub_section_value
-                # Add name to the dict in case the model wants it
-                ref_section_value['config_source_name'] = section_name
-                section_contents.append(ref_section_value)
-            field_value = section_contents
+                    new_field_values.append(ref_object_dict[value])
+                else:
+                    new_field_values.append(value)
     elif lenient_issubclass(field_info.annotation, dict):
         if isinstance(field_value, str):
             try:
                 field_value = parse_as_literal_or_json(field_value)
             except ValueError as e:
-                raise ConfigError(f"Field {full_name(parents, field_name)} {e}")
-
-        # Conditional change to field_value to obtain value from another config section
-        if create_from_section_names:
-            section_contents = dict()
-            for key, value in field_value.items():
-                if has_sub_fields(field_info):
-                    sub_field_name, sub_field_info = get_one_sub_field(field_info)
-                    # Transform section_value as needed
-                    section_value = match_config_data_to_field(
-                        field_name=sub_field_name,
-                        field_info=sub_field_info,
-                        field_value=value,
-                        create_from_section_names=True,
-                        parent_container=field_value,
-                        root_config_data=root_config_data,
-                        parents=parents + [field_name, key, value]
+                try:
+                    list_of_sections = parse_delimited_list(field_name, field_info, field_value)
+                    inner_type_args = get_args(field_info.annotation)
+                    if len(inner_type_args) != 2:
+                        raise SyntaxError(
+                            f"{full_name(parents, field_name)} has type {field_info.annotation} "
+                            f"without exactly 2 inner types {inner_type_args}"
+                        )
+                    elif len(inner_type_args) == 2:
+                        inner_type1 = inner_type_args[0]
+                        if inner_type1 != str:
+                            raise SyntaxError(
+                                f"{full_name(parents, field_name)} has type {field_info.annotation} "
+                                f"with the first inner type not being str (it is {inner_type1})"
+                            )
+                        inner_type2 = inner_type_args[1]
+                        if has_sub_fields(inner_type2):
+                            ref_object_dict = build_referenced_objects(
+                                field_name=field_name,
+                                field_info=field_info,
+                                parents=parents,
+                                parent_container=parent_container,
+                                root_config_data=root_config_data,
+                                list_of_sections=list_of_sections,
+                                inner_type=inner_type2,
+                            )
+                            field_value = ref_object_dict
+                except ValueError as e2:
+                    raise ConfigError(
+                        f"Field {full_name(parents, field_name)} {e}. "
+                        f"Tried as list of section references and got {e2}."
                     )
-                    section_contents[key] = section_value
-                else:
-                    section_value = find_referenced_section(
-                        field_name=field_name,
-                        field_info=field_info,
-                        parents=parents,
-                        section_name=value,
-                        current_dict=parent_container,
-                        root_dict=root_config_data,
-                    )
-                    section_contents[key] = section_value
-            field_value = section_contents
     elif lenient_issubclass(field_info.annotation, set):
         if isinstance(field_value, str):
             field_value = set(
@@ -440,9 +482,6 @@ def match_config_data_to_model(
     return config_data
 
 
-def should_create_from_section_names(field_info: FieldInfo):
-    return inspect.isclass(field_info.annotation) and issubclass(field_info.annotation, ListDynamicallyReferenced)
-
 def match_config_data_to_field_or_submodel(
         field_name: str,
         field_info: FieldInfo,
@@ -450,25 +489,8 @@ def match_config_data_to_field_or_submodel(
         root_config_data: MutableMapping = None,
         parents=None
 ):
-    create_from_section_names = should_create_from_section_names(field_info)
 
-    if inspect.isclass(field_info.annotation) and issubclass(field_info.annotation, DynamicallyReferenced):
-        updated_value = match_config_data_to_field(
-            field_name=field_name,
-            field_info=field_info,
-            field_value=parent_container[field_name],
-            create_from_section_names=create_from_section_names,
-            parent_container=parent_container,
-            root_config_data=root_config_data,
-            parents=parents
-        )
-        if isinstance(updated_value, list):
-            updated_value = [{'ref': entry} for entry in updated_value]
-        elif hasattr(updated_value, 'items'):  # dict
-            updated_value = {key: {'ref': entry} for key, entry in updated_value.items()}
-        else:  # str
-            updated_value = {'ref': updated_value}
-    elif hasattr(field_info.annotation, 'model_fields') and not create_from_section_names:
+    if has_sub_fields(field_info.annotation):
         # noinspection PyTypeChecker
         updated_value = match_config_data_to_model(
             model=field_info.annotation,
@@ -481,7 +503,6 @@ def match_config_data_to_field_or_submodel(
             field_name=field_name,
             field_info=field_info,
             field_value=parent_container[field_name],
-            create_from_section_names=create_from_section_names,
             parent_container=parent_container,
             root_config_data=root_config_data,
             parents=parents
@@ -498,9 +519,8 @@ def walk_model(
 
     # Scan all model fields to look for values in the MutableMapping
     for field_name, field_info in model.model_fields.items():
-        if inspect.isclass(field_info.annotation) and issubclass(field_info.annotation, DynamicallyReferenced):
-            yield field_name, field_info, parents
-        elif hasattr(field_info.annotation, 'model_fields'):
+        if has_sub_fields(field_info.annotation):
+            # noinspection PyTypeChecker
             yield from walk_model(
                 model=field_info.annotation,
                 parents=parents + [field_name]

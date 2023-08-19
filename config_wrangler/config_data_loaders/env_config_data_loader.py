@@ -6,7 +6,7 @@ from typing import *
 from pydantic import BaseModel
 
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
-from config_wrangler.utils import walk_model, match_config_data_to_field
+from config_wrangler.utils import walk_model, match_config_data_to_field, has_sub_fields
 
 
 class EnvConfigDataLoader(BaseConfigDataLoader):
@@ -60,12 +60,11 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
                     self.log.info(f"Read ENV {env_var} into {parents} {field_name} {field_info}")
                     env_val = env_vars[env_var]
 
-            if hasattr(field_info.annotation, 'model_fields'):
+            if has_sub_fields(field_info.annotation):
                 env_val = match_config_data_to_field(
                     field_name=field_name,
                     field_info=field_info,
                     field_value=env_val,
-                    create_from_section_names=False,  # Not yet supported for env
                     parent_container={},
                     root_config_data={},
                     parents=parents,

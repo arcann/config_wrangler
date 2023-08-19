@@ -6,7 +6,7 @@ from datetime import datetime, time
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
 
-from pydantic import ByteSize, Field
+from pydantic import ByteSize, Field, model_validator
 from pydicti import Dicti
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
@@ -70,10 +70,12 @@ class LoggingConfig(ConfigHierarchy):
     trace_logging_setup: bool = False
     log_levels: Dict[str, LogLevel]
 
-    def _validate_model_(self):
+    @model_validator(mode='after')
+    def _validate_logging(self):
         if self.log_file_name is not None:
             if self.log_folder is None:
                 raise ValueError(f"{self.full_item_name()} log_file_name set but no log_folder provided")
+        return self
 
     @staticmethod
     def get_dated_log_file_name(
