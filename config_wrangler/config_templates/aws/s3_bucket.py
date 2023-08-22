@@ -51,10 +51,12 @@ class S3_Bucket(AWS_Session):
     def get_bucket_region(self) -> str:
         """
         Get the region_name from the actual S3 bucket definition.
-        NOTE: This can differ from the region_name attribute specified in the init call to this class
-              or the config file that loads it.
-              The region_name attribute is used for establishing the AWS session.
-              get_bucket_region() is used to find out in which region the data is stored.
+
+        NOTE:
+            This can differ from the region_name attribute specified in the init call to this class
+            or the config file that loads it.
+            The region_name attribute is used for establishing the AWS session.
+            get_bucket_region() is used to find out in which region the data is stored.
         """
         return S3_Bucket._get_bucket_region(self.client, self.bucket_name)
 

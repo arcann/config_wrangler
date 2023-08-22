@@ -1,1 +1,1 @@
-sphinx-apidoc -f -o source -e ..\config_wrangler
+sphinx-apidoc -f -d 1 -o source -e ..\config_wrangler

@@ -7,6 +7,9 @@ from pydantic_core import PydanticUndefined
 
 class DelimitedListFieldInfo(FieldInfo):
     delimiter: str
+    """
+    The delimiter to use when parsing the value into a list. (DelimitedListFieldInfo specific) 
+    """
 
     __slots__ = (
         'delimiter'
@@ -52,9 +55,10 @@ def DelimitedListField(  # noqa: C901
         max_length: int | None = PydanticUndefined,
         delimiter: str = ','
 ) -> Any:
-    """Usage docs: https://docs.pydantic.dev/dev-v2/usage/fields
+    """
+    Create a field for a `list` of objects, plus other Pydantic `Field` configuration options.
 
-    Create a field for objects that can be configured.
+    *Pydantic standard docs*:
 
     Used to provide extra information about a field, either for the model schema or complex validation. Some arguments
     apply only to number fields (`int`, `float`, `Decimal`) and some apply only to `str`.

@@ -5,7 +5,7 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 1
 
    config_wrangler.config_data_loaders.base_config_data_loader
    config_wrangler.config_data_loaders.env_config_data_loader
