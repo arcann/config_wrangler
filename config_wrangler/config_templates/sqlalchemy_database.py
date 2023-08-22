@@ -29,22 +29,22 @@ from config_wrangler.config_templates.credentials import Credentials
 
 class SQLAlchemyDatabase(Credentials):
     dialect: str
-    driver: str = None
+    driver: Optional[str] = None
     host: str
-    port: int = None
+    port: Optional[int] = None
     database_name: str
     use_get_cluster_credentials: bool = False
     rs_new_credentials_seconds: int = 1800
-    rs_region_name: str = None
-    rs_cluster_id: str = None
-    aws_access_key_id: str = None
-    aws_secret_access_key: str = None
-    rs_db_user_id: str = None
-    rs_duration_seconds: str = 3600
+    rs_region_name: Optional[str] = None
+    rs_cluster_id: Optional[str] = None
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+    rs_db_user_id: Optional[str] = None
+    rs_duration_seconds: Optional[str] = 3600
     create_engine_args: Dict[str, Any] = {}
-    arraysize: int = 5000  # Only used for Oracle
-    encoding: str = None
-    poolclass: str = None
+    arraysize: Optional[int] = 5000  # Only used for Oracle
+    encoding: Optional[str] = None
+    poolclass: Optional[str] = None
 
     # Private attribute used to hold the redshift client
     _engine = PrivateAttr(default=None)

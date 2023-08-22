@@ -27,7 +27,7 @@ from config_wrangler.config_templates.credentials import Credentials
 # AWSSession does not look right
 # noinspection PyPep8Naming
 class AWS_Session(Credentials):
-    region_name: str = None
+    region_name: Optional[str] = None
 
     _session = PrivateAttr(default=None)
     _service: str = PrivateAttr(default=None)

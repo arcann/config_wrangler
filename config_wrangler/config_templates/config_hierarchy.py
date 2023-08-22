@@ -160,7 +160,7 @@ class ConfigHierarchy(BaseModel):
         child_object._root_config = self._root_config
 
     @deprecated(
-        'The `dict` method is deprecated; use `add_child` instead.', category=DeprecationWarning
+        'The `set_as_child` method is deprecated; use `add_child` instead.', category=DeprecationWarning
     )
     def set_as_child(self, name: str, other_config_item: 'ConfigHierarchy'):
         self.add_child(name, other_config_item)

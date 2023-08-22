@@ -32,13 +32,14 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
 
             field_possible_names = [field_info.serialization_alias, field_info.alias, field_name]
 
-            # Search for env var named directly after the field (it would apply to that field in ANY section)
-            for env_name in field_possible_names:
-                if env_name is not None:
-                    env_name = self.env_prefix + env_name
-                    env_val = env_vars.get(env_name.lower())
-                    if env_val is not None:
-                        break
+            # Search for env var named directly after the prefix + field (it would apply to that field in ANY section)
+            if self.env_prefix is not None and self.env_prefix != '':
+                for env_name in field_possible_names:
+                    if env_name is not None:
+                        env_full_name = f"{self.env_prefix}{env_name}"
+                        env_val = env_vars.get(env_full_name.lower())
+                        if env_val is not None:
+                            break
 
             if env_val is None:
                 possible_name_delim = ('_', '.', ':')

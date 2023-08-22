@@ -11,11 +11,11 @@ from config_wrangler.config_types.path_types import PathFindUpExpandUser
 @public
 class KeepassConfig(ConfigHierarchy):
     database_path: PathFindUpExpandUser
-    default_group: str = None
+    default_group: Optional[str] = None
     password_source: PasswordSourceValidated = PasswordSource.KEYRING
-    raw_password: str = None
-    keyring_section: str = None
-    keyring_user_id: str = None
+    raw_password: Optional[str] = None
+    keyring_section: Optional[str] = None
+    keyring_user_id: Optional[str] = None
     alternate_group_names: Dict[str, str] = {}
 
     _db = PrivateAttr(default=None)

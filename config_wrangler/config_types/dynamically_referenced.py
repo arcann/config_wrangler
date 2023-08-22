@@ -3,6 +3,7 @@ from typing import TypeVar, Generic, List
 from pydantic import field_validator
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.validate_config_hierarchy import config_hierarchy_validator
 
 RefConfigHierarchy = TypeVar('RefConfigHierarchy', bound=ConfigHierarchy)
 
@@ -16,6 +17,7 @@ class DynamicallyReferenced(ConfigHierarchy):
     # TODO: validator will check that the reference exists.
     ref: str
 
+    # noinspection PyNestedDecorators
     @field_validator('ref')
     @classmethod
     def _validate_phase_1(cls, value):
@@ -23,8 +25,9 @@ class DynamicallyReferenced(ConfigHierarchy):
             raise ValueError('Blank is not valid for a DynamicallyReferenced section')
         return value
 
-    # TODO: Change to _config_hierarchy_validators decorator
-    def _validate_model_reference(self):
+    # TODO: Fix
+    @config_hierarchy_validator
+    def _validate_config_hierarchy_validator(self):
         _ = self.get_referenced()
 
     def get_referenced(self) -> ConfigHierarchy:

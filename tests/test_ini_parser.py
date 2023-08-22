@@ -1,6 +1,7 @@
 import json
 import os
 import unittest
+import warnings
 from datetime import date, time, datetime
 from typing import *
 from unittest import mock
@@ -35,8 +36,8 @@ class TestSection(ConfigHierarchy):
     my_list_auto_pipe: list
     my_list_python: list
     my_list_json: list
-    my_list_c: list = DelimitedListField(delimiter=',')
-    my_list_nl: list = DelimitedListField(delimiter='\n')
+    my_list_c: Optional[List[str]] = DelimitedListField(delimiter=',')
+    my_list_nl: Union[List[str], None] = DelimitedListField(delimiter='\n')
     my_list_int_c: List[int] = DelimitedListField(delimiter=',')
     my_tuple_c: tuple = DelimitedListField(delimiter=',')
     my_tuple_nl: tuple = DelimitedListField(delimiter='\n')
@@ -210,6 +211,12 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
         )
         self._test_simple_example_config(config)
 
+        for o, parents in config.iter_object_tree():
+            if parents[-1] not in {
+                'raw_password', 'password', 'aws_secret_access_key'
+            }:
+                self.log.info(f"Config item {'.'.join(parents)} = {o}")
+
     def test_read_start_path_deeper_start(self):
         config = ConfigToTestWith(
             file_name='test_good.ini',
@@ -339,7 +346,9 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
 
             config.target_database.keepass_group = 'bad'
             with self.assertRaises(ValueError) as raises_cm:
-                config.target_database.get_password()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    config.target_database.get_password()
             exc_str = str(raises_cm.exception)
             print("Exception str")
             print(exc_str)
@@ -362,7 +371,9 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
 
             config.target_database.user_id = 'bad'
             with self.assertRaises(ValueError) as raises_cm:
-                config.target_database.get_password()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    config.target_database.get_password()
             exc_str = str(raises_cm.exception)
             print("Exception str")
             print(exc_str)
@@ -461,11 +472,9 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
             )
             self.assertEqual(config.target_database.get_password(), password)
 
-            d = config.dict()
+            d = config.model_dump()
             self.assertEqual(d['test_section']['my_url'], config.test_section.my_url)
-            json_str = config.json()
-            json_d = json.loads(json_str)
-            self.assertEqual(json_d['test_section']['my_int'], config.test_section.my_int)
+            self.assertEqual(d['test_section']['my_int'], config.test_section.my_int)
         except (ValueError, ImportError) as e:
             if "No module named 'keyring'" in str(e):
                 if keyring is None:

@@ -10,6 +10,8 @@ from config_wrangler.config_templates.password_source import PasswordSource, Pas
 
 __all__ = ['Credentials', 'PasswordDefaults', 'PasswordSource']
 
+from config_wrangler.validate_config_hierarchy import config_hierarchy_validator
+
 
 class Credentials(ConfigHierarchy):
     user_id: str
@@ -86,7 +88,8 @@ class Credentials(ConfigHierarchy):
 
     def _get_password_config(self):
         warnings.warn(
-            'Passwords stored directly in config or worse in code are not safe. Please make sure to fix this before deploying.'
+            'Passwords stored directly in config or worse in code are not safe. Please make sure to fix this before deploying.',
+            stacklevel=3,
         )
         password = self.raw_password
         search_info = f"{self.full_item_name()}.raw_password"
@@ -183,14 +186,17 @@ class Credentials(ConfigHierarchy):
                         f"and 'passwords' section does not have 'password_source' {e} "
                     )
 
-        if self.password_source == PasswordSource.KEYRING:
-            password, search_info = self._get_password_keyring()
-        elif self.password_source == PasswordSource.CONFIG_FILE:
-            password, search_info = self._get_password_config()
-        elif self.password_source == PasswordSource.KEEPASS:
-            password, search_info = self._get_password_keepass()
-        else:
-            raise ValueError(f"{self.full_item_name()} invalid password_source {self.password_source}")
+        try:
+            if self.password_source == PasswordSource.KEYRING:
+                password, search_info = self._get_password_keyring()
+            elif self.password_source == PasswordSource.CONFIG_FILE:
+                password, search_info = self._get_password_config()
+            elif self.password_source == PasswordSource.KEEPASS:
+                password, search_info = self._get_password_keepass()
+            else:
+                raise ValueError(f"invalid password_source")
+        except Exception as e:
+            raise ValueError(f"{self.full_item_name()} with password_source={self.password_source} got error {e}")
 
         if password is None or password == '':
             raise ValueError(f"{self.full_item_name()} password is not set. Source is {self.password_source} location = {search_info}")
@@ -198,7 +204,7 @@ class Credentials(ConfigHierarchy):
         return password
 
     @model_validator(mode='after')
-    def check_password(self):
+    def check_model(self):
         user_id = self.user_id
         cls = self.__class__
         if user_id == '' or user_id is None:
@@ -216,17 +222,17 @@ class Credentials(ConfigHierarchy):
             password = self.raw_password
             if password is None or password == '':
                 raise ValueError(f"{self} password_source is Config but password is not set")
-
-        if self._root_config is None:
-            if self.validate_password_on_load:
-                _ = self.get_password()
-        else:
-            model_config = self._root_config.Config
-            if model_config.validate_default and model_config.validate_credentials and self.validate_password_on_load:
-                config = self._root_config.Config
-                validate_passwords = getattr(config, 'validate_passwords', True)
-                if validate_passwords:
-                    _ = self.get_password()
-
         return self
 
+    @config_hierarchy_validator
+    def check_config_hierarchy(self):
+        if self._root_config is None:
+            raise ValueError("Credentials are not part of a ConfigRoot hierarchy")
+        else:
+            model_config = self._root_config.Config
+            validate_credentials = getattr(model_config, 'validate_credentials', True)
+            if model_config.validate_default and validate_credentials and self.validate_password_on_load:
+                root_config = self._root_config.Config
+                root_validate_credentials = getattr(root_config, 'validate_credentials', True)
+                if root_validate_credentials:
+                    _ = self.get_password()

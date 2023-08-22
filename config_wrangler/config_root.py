@@ -1,6 +1,7 @@
 import ast
 import inspect
 import logging
+import warnings
 from typing import List, Any, Type
 
 from pydantic import PrivateAttr, BaseModel
@@ -8,6 +9,7 @@ from pydantic import PrivateAttr, BaseModel
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.credentials import PasswordDefaults
 from config_wrangler.config_wrangler_config import ConfigWranglerConfig
+from config_wrangler.validate_config_hierarchy import get_validation_functions
 
 # TODO: How does pydantic 2 use validation errors
 
@@ -78,8 +80,8 @@ class ConfigRoot(ConfigHierarchy):
                 )
 
     # @staticmethod
-    # def get_decorators(cls: Type):
-    #     target = cls
+    # def get_decorators(cls: BaseModel):
+    #     target = cls.__module__
     #     decorators = {}
     #
     #     def visit_function(node):
@@ -122,18 +124,29 @@ class ConfigRoot(ConfigHierarchy):
                 errors=errors
             )
 
-        # Run any model level validators
-        for attr in dir(model_level):
-            # TODO: Find a better way to identify these ConfigHierarchy validators
-            #       See get_decorators
-            #       Or maybe decorator adds itself to ConfigHierarchy _config_hierarchy_validators = PrivateAttr(default=[])
-            if attr.startswith('_validate_model_'):
-                method = getattr(model_level, attr)
-                if callable(method):
-                    try:
-                        method()
-                    except (ValueError, TypeError, AssertionError) as exc:
-                        errors.add(f"Failed check {parents} {attr} with {repr(exc)}")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                method_list = inspect.getmembers(model_level, predicate=inspect.ismethod)
+            except Exception:
+                method_list = []
+        for validation_method_name, validation_method in method_list:
+            qualified_name = f"{model_level.__class__.__qualname__}.{validation_method_name}"
+            if hasattr(validation_method, '_is_config_hierarchy_validator'):
+                try:
+                    validation_method()
+                except (ValueError, TypeError, AssertionError) as exc:
+                    errors.add(f"Failed check {parents}  {qualified_name} with {repr(exc)}")
+            elif validation_method_name.startswith('_validate_model_'):
+                warnings.warn(
+                    f"{qualified_name}"
+                    " uses deprecated name based validation function finding. "
+                    "Please use @config_hierarchy_validator instead."
+                )
+                try:
+                    validation_method()
+                except (ValueError, TypeError, AssertionError) as exc:
+                    errors.add(f"Failed check {parents}  {qualified_name} with {repr(exc)}")
 
     def validate_model(self):
         errors = set()
@@ -150,3 +163,5 @@ class ConfigRoot(ConfigHierarchy):
             indent = ' ' * 3
             errors_str = f"\n{indent}".join(errors)
             raise ValueError(f"Config Errors (cnt={len(errors)}). Errors=\n{indent}{errors_str}")
+
+

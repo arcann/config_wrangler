@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import types
+import warnings
 from datetime import timezone, datetime
 from typing import *
 
@@ -33,9 +34,10 @@ def lenient_issubclass(
                 origin = get_origin(cls)
             if origin is not None:
                 if origin == Union:
-                    for union_cls in get_args(class_or_tuple):
-                        if issubclass(union_cls, class_or_tuple):
+                    for union_cls in get_args(cls):
+                        if lenient_issubclass(union_cls, class_or_tuple):
                             return True
+                    return False
                 else:
                     return issubclass(origin, class_or_tuple)
 
@@ -43,6 +45,19 @@ def lenient_issubclass(
         if isinstance(cls, (types.GenericAlias, types.UnionType)):
             return False
         raise
+
+
+def get_inner_type(cls: Any):
+    try:
+        origin = cls.__origin__
+    except AttributeError:
+        origin = get_origin(cls)
+
+    if origin == Union:
+        for inner_cls in get_args(cls):
+            return get_inner_type(inner_cls)
+    else:
+        return get_args(cls)
 
 
 def has_sub_fields(inner_type: Type):
@@ -203,7 +218,8 @@ def parse_delimited_list(
         try:
             result = parse_as_literal_or_json(value)
         except ValueError as e:
-            raise ConfigError(f"Field {field_name} {e}")
+            # Single value list
+            result = [value]
     return result
 
 
@@ -302,7 +318,7 @@ def match_config_data_to_field(
         if isinstance(field_value, str):
             field_value = parse_delimited_list(field_name, field_info, field_value)
 
-        inner_type_args = get_args(field_info.annotation)
+        inner_type_args = get_inner_type(field_info.annotation)
         if len(inner_type_args) > 1:
             raise SyntaxError(
                 f"{full_name(parents, field_name)} has type {field_info.annotation} "
@@ -327,7 +343,7 @@ def match_config_data_to_field(
 
         # See docs for Tuple annotations
         # https://docs.python.org/3/library/typing.html#annotating-tuples
-        inner_type_args = get_args(field_info.annotation)
+        inner_type_args = get_inner_type(field_info.annotation)
         if len(inner_type_args) == 0:
             # Nothing to do for untyped tuple container
             pass
@@ -372,7 +388,7 @@ def match_config_data_to_field(
             except ValueError as e:
                 try:
                     list_of_sections = parse_delimited_list(field_name, field_info, field_value)
-                    inner_type_args = get_args(field_info.annotation)
+                    inner_type_args = get_inner_type(field_info.annotation)
                     if len(inner_type_args) != 2:
                         raise SyntaxError(
                             f"{full_name(parents, field_name)} has type {field_info.annotation} "
@@ -445,13 +461,12 @@ def match_config_data_to_model(
         field_name = field_info.alias or field_name_outer
         field_lower = field_name.lower()
 
-        if field_lower in config_data:
+        if field_lower in config_name_map:
             found = True
-        elif field_lower in config_name_map:
-            found = True
-            field_name = config_name_map[field_lower]
-            config_data[field_info] = config_data[field_name]
-            del config_data[field_name]
+            source_field_name = config_name_map[field_lower]
+            if source_field_name != field_name:
+                config_data[field_name] = config_data[source_field_name]
+                del config_data[source_field_name]
         else:
             found = False
 
@@ -491,6 +506,9 @@ def match_config_data_to_field_or_submodel(
 ):
 
     if has_sub_fields(field_info.annotation):
+        if field_name not in parent_container:
+            raise ValueError(f"Field {full_name(parents, field_name)} not found.")
+
         # noinspection PyTypeChecker
         updated_value = match_config_data_to_model(
             model=field_info.annotation,

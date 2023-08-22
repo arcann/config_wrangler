@@ -36,9 +36,9 @@ class FileHandlerClass(StrEnum):
 class LoggingConfig(ConfigHierarchy):
     console_log_level: LogLevel = LogLevel.INFO
     console_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
-    log_folder: AutoCreateDirectoryPath = None
-    log_file_name: str = None
-    add_date_to_log_file_name: bool = None
+    log_folder: Optional[AutoCreateDirectoryPath] = None
+    log_file_name: Optional[str] = None
+    add_date_to_log_file_name: Optional[bool] = None
     log_file_name_date_time_format: str = '_%Y_%m_%d_at_%H_%M_%S'
     file_log_level: LogLevel = LogLevel.DEBUG
     log_file_entry_format: str = '%(asctime)s - %(levelname)-8s - %(name)s: %(message)s'
@@ -52,7 +52,7 @@ class LoggingConfig(ConfigHierarchy):
     # https://docs.python.org/3/library/logging.handlers.html#rotatingfilehandler
     log_file_timed_rotation_when: str = 'midnight'
     log_file_timed_rotation_interval: int = 1
-    log_file_timed_rotation_attime: time = None
+    log_file_timed_rotation_attime: Optional[time] = None
     """
     Note: If log_file_timed_rotation_attime is included it must be a valid time
           with or without seconds:

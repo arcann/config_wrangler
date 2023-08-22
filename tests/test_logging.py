@@ -35,6 +35,8 @@ class TestLogging(unittest.TestCase, Base_Tests_Mixin):
         os.chdir(self.temp_dir)
 
     def tearDown(self):
+        for handler in self.logger.handlers:
+            handler.close()
         self.logger.handlers = self.orig_handlers
         self.logger.level = self.level
         # We need to change back out of the temp dir, so that it can be cleaned up

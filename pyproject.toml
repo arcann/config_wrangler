@@ -10,7 +10,7 @@ repository = "https://github.com/arcann/config_wrangler"
 
 [tool.poetry.dependencies]
 python = ">=3.7, <4.0.0"
-pydantic = ">=2.1"
+pydantic = ">=2.2"
 StrEnum = "^0.4.7"
 SQLAlchemy = {version = ">=1.4", optional = true}
 # Keep boto3 fairly current to avoid scanning a huge list of versions
