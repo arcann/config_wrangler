@@ -143,9 +143,7 @@ class LoggingConfig(ConfigHierarchy):
 
             # Make sure the directory exists
             dir_name = log_file_path.parent
-            # TODO: We should mkdir on relative paths as well
-            #       Check only that dir_name is not '.'
-            if dir_name.is_absolute():
+            if dir_name != '.':
                 dir_name.mkdir(parents=True, exist_ok=True)
 
             if self.log_file_rotation_class == FileHandlerClass.RotatingFileHandler:

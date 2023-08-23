@@ -69,7 +69,10 @@ class TestDynamicStaticRef(unittest.TestCase, Base_Tests_Mixin):
         #       so it should have a manufacturer
         self.assertEqual(product4.manufacturer, 'Ford')
 
-        # TODO: Test the dict_of_products
+        # Test the dict_of_products
+        dict_of_products = config.main_section.dict_of_products
+        self.assertEqual(dict_of_products['apple'].get_referenced().name, 'Granny Smith')
+        self.assertEqual(dict_of_products['banana'].get_referenced().name, 'Over-ripe')
 
     def test_dynamic_static_bad_instance(self):
         with self.assertRaises(ValueError) as raises_cm:

@@ -55,7 +55,10 @@ class TestDynamicDynamicRef(unittest.TestCase, Base_Tests_Mixin):
         with self.assertRaises(AttributeError):
             _ = product4.manufacturer
 
-        # TODO: Test the dict_of_products
+        # Test the dict_of_products
+        dict_of_products = config.main_section.dict_of_products
+        self.assertEqual(dict_of_products['apple'].name, 'Granny Smith')
+        self.assertEqual(dict_of_products['banana'].name, 'Over-ripe')
 
     def test_dynamic_bad_instance(self):
         with self.assertRaises(ValueError) as raises_cm:

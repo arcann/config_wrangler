@@ -1,24 +1,13 @@
-import ast
 import inspect
 import logging
 import warnings
-from typing import List, Any, Type
+from typing import List, Any
 
 from pydantic import PrivateAttr, BaseModel
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.credentials import PasswordDefaults
 from config_wrangler.config_wrangler_config import ConfigWranglerConfig
-from config_wrangler.validate_config_hierarchy import get_validation_functions
-
-# TODO: How does pydantic 2 use validation errors
-
-# class BadValueError(PydanticValueError):
-#     msg_template = '{original}. value_provided = {value_str}'
-#
-#     def __init__(self, original: PydanticValueError, value_str: str) -> None:
-#         super().__init__(original=original, value_str=value_str)
-
 
 private_attrs = ('_root_config', '_parents', '_name_map')
 
@@ -78,26 +67,6 @@ class ConfigRoot(ConfigHierarchy):
                     parents=parents + [f"[{key}]"],
                     errors=errors
                 )
-
-    # @staticmethod
-    # def get_decorators(cls: BaseModel):
-    #     target = cls.__module__
-    #     decorators = {}
-    #
-    #     def visit_function(node):
-    #         decorators[node.name] = []
-    #         for n in node.decorator_list:
-    #             if isinstance(n, ast.Call):
-    #                 name = n.func.attr if isinstance(n.func, ast.Attribute) else n.func.id
-    #             else:
-    #                 name = n.attr if isinstance(n, ast.Attribute) else n.id
-    #
-    #             decorators[node.name].append(name)
-    #
-    #     node_iter = ast.NodeVisitor()
-    #     node_iter.visit_FunctionDef = visit_function
-    #     node_iter.visit(ast.parse(inspect.getsource(target)))
-    #     return decorators
 
     def fill_hierarchy(
             self,
@@ -163,5 +132,3 @@ class ConfigRoot(ConfigHierarchy):
             indent = ' ' * 3
             errors_str = f"\n{indent}".join(errors)
             raise ValueError(f"Config Errors (cnt={len(errors)}). Errors=\n{indent}{errors_str}")
-
-

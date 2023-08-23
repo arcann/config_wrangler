@@ -14,7 +14,6 @@ class DynamicallyReferenced(ConfigHierarchy):
     The data type of the section can be any subclass of ConfigHierarchy.
     The validator will check that the reference exists.
     """
-    # TODO: validator will check that the reference exists.
     ref: str
 
     # noinspection PyNestedDecorators
@@ -25,7 +24,6 @@ class DynamicallyReferenced(ConfigHierarchy):
             raise ValueError('Blank is not valid for a DynamicallyReferenced section')
         return value
 
-    # TODO: Fix
     @config_hierarchy_validator
     def _validate_config_hierarchy_validator(self):
         _ = self.get_referenced()
