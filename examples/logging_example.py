@@ -8,6 +8,7 @@ from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.logging_config import LoggingConfig
 from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket
 from config_wrangler.config_types.path_types import AutoCreateDirectoryPath
+from config_wrangler.config_wrangler_config import ConfigWranglerConfig
 
 
 # noinspection PyPep8Naming
@@ -26,11 +27,6 @@ class TestSection(ConfigHierarchy):
 
 
 class LoggingExampleConfig(ConfigFromIniEnv):
-
-    class Config:
-        validate_default = True
-        validate_assignment = True
-
     test_section: TestSection
 
     logging: LoggingConfig

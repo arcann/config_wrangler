@@ -1,9 +1,10 @@
-import collections.abc
-from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Set, Generator, Tuple, Sequence
+from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Set, Generator, Tuple
 
-from pydantic import PrivateAttr, BaseModel, ValidationError
+from pydantic import PrivateAttr, BaseModel
 # noinspection PyProtectedMember
 from typing_extensions import deprecated
+
+from config_wrangler.config_wrangler_config import ConfigWranglerConfig
 
 if TYPE_CHECKING:
     from config_wrangler.config_from_loaders import ConfigFromLoaders
@@ -30,6 +31,11 @@ class ConfigHierarchy(BaseModel):
     NOTE: This class requires that the top of the hierarchy be an instance of
     :py:class:`config_wrangler.config_root.ConfigRoot`
     """
+    model_config = ConfigWranglerConfig(
+        validate_default=True,
+        validate_assignment=True,
+        validate_credentials=True
+    )
     _root_config: 'ConfigFromLoaders' = PrivateAttr(default=None)
     _parents: List[str] = PrivateAttr(default=['parents_not_set'])
     _name_map: Dict[str, str] = PrivateAttr(default={})

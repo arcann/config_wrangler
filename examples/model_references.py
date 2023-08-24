@@ -5,6 +5,7 @@ from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.delimited_field import DelimitedListField
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
+from config_wrangler.config_wrangler_config import ConfigWranglerConfig
 
 
 # noinspection PyPep8Naming
@@ -16,9 +17,11 @@ class Bucket_Compare_Section(ConfigHierarchy):
 
 class BucketCompareConfig(ConfigFromIniEnv):
 
-    class Config:
-        validate_default = True
-        validate_assignment = True
+    model_config = ConfigWranglerConfig(
+        validate_default=True,
+        validate_assignment=True,
+        validate_credentials=False,
+    )
 
     bucket_1: S3_Bucket
 

@@ -53,11 +53,6 @@ class TestSection(ConfigHierarchy):
 
 
 class ETLConfig(ConfigFromIniEnv):
-
-    class Config:
-        validate_default = True
-        validate_assignment = True
-
     target_database: SQLAlchemyDatabase
 
     s3_source: S3_Bucket_KeyPrefixes

@@ -30,7 +30,7 @@ from config_wrangler.config_templates.credentials import Credentials
 class SQLAlchemyDatabase(Credentials):
     dialect: str
     driver: Optional[str] = None
-    host: str
+    host: Optional[str] = None
     port: Optional[int] = None
     database_name: str
     use_get_cluster_credentials: bool = False
@@ -40,7 +40,7 @@ class SQLAlchemyDatabase(Credentials):
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
     rs_db_user_id: Optional[str] = None
-    rs_duration_seconds: Optional[str] = 3600
+    rs_duration_seconds: Optional[int] = 3600
     create_engine_args: Dict[str, Any] = {}
     arraysize: Optional[int] = 5000  # Only used for Oracle
     encoding: Optional[str] = None
@@ -61,8 +61,8 @@ class SQLAlchemyDatabase(Credentials):
     def __str__(self):
         return str(self.get_uri())
 
-    @model_validator(mode="before")
     @classmethod
+    @model_validator(mode="before")
     def translate(cls, values):
         # Convert from old setting names to new names
         name_map = {
@@ -100,6 +100,14 @@ class SQLAlchemyDatabase(Credentials):
                 values['create_engine_args'] = create_engine_args_dict
 
         return values
+
+    @model_validator(mode='after')
+    def check_model(self):
+        if self.dialect == 'sqlite':
+            # Bypass password checks
+            return self
+        else:
+            return Credentials.check_model(self)
 
     def get_password(self) -> str:
         try:

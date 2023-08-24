@@ -15,6 +15,7 @@ from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
 from config_wrangler.config_types.delimited_field import DelimitedListField
+from config_wrangler.config_wrangler_config import ConfigWranglerConfig
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
@@ -61,9 +62,11 @@ class TestSection(ConfigHierarchy):
 
 class ConfigToTestWith(ConfigFromIniEnv):
 
-    class Config:
-        validate_default = False
-        validate_assignment = True
+    model_config = ConfigWranglerConfig(
+        validate_default=True,
+        validate_assignment=True,
+        validate_credentials=True,
+    )
 
     target_database: SQLAlchemyDatabase
 
@@ -210,12 +213,6 @@ class TestIniParsee(unittest.TestCase, Base_Tests_Mixin):
             start_path=self.get_test_files_path()
         )
         self._test_simple_example_config(config)
-
-        for o, parents in config.iter_object_tree():
-            if parents[-1] not in {
-                'raw_password', 'password', 'aws_secret_access_key'
-            }:
-                self.log.info(f"Config item {'.'.join(parents)} = {o}")
 
     def test_read_start_path_deeper_start(self):
         config = ConfigToTestWith(

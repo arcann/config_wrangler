@@ -14,7 +14,7 @@ from config_wrangler.validate_config_hierarchy import config_hierarchy_validator
 
 
 class Credentials(ConfigHierarchy):
-    user_id: str
+    user_id: Optional[str] = None
     """
     The user ID to use
     """
@@ -206,12 +206,7 @@ class Credentials(ConfigHierarchy):
     @model_validator(mode='after')
     def check_model(self):
         user_id = self.user_id
-        cls = self.__class__
         if user_id == '' or user_id is None:
-            if cls.__name__ == 'SQLAlchemyDatabase':
-                if self.dialect == 'sqlite':
-                    # Bypass password checks
-                    return self
             raise ValueError("user_id not provided")
 
         if self.password_source == PasswordSource.KEYRING:
@@ -229,10 +224,10 @@ class Credentials(ConfigHierarchy):
         if self._root_config is None:
             raise ValueError("Credentials are not part of a ConfigRoot hierarchy")
         else:
-            model_config = self._root_config.Config
+            model_config = self._root_config.model_config
             validate_credentials = getattr(model_config, 'validate_credentials', True)
-            if model_config.validate_default and validate_credentials and self.validate_password_on_load:
-                root_config = self._root_config.Config
-                root_validate_credentials = getattr(root_config, 'validate_credentials', True)
+            if model_config.get('validate_default', True) and validate_credentials and self.validate_password_on_load:
+                root_config = self._root_config.model_config
+                root_validate_credentials = root_config.get('validate_credentials', True)
                 if root_validate_credentials:
                     _ = self.get_password()

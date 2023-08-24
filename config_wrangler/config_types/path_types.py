@@ -20,6 +20,19 @@ def _file_validator(p: Path) -> Path:
         raise ValueError(f"{p} is not a directory")
     return p
 
+def _writable_file_validator(p: Path) -> Path:
+    if p.is_file():
+        if not os.access(p, os.W_OK):
+            raise ValueError(f"{p} exists and is not writable")
+    else:
+        parent = p.parent
+        if not parent.is_dir():
+            raise ValueError(f"{p} error {parent} is not a directory")
+        else:
+            if not os.access(parent, os.W_OK):
+                raise ValueError(f"{p.name} can't be created in {parent}")
+    return p
+
 
 def _directory_validator(p: Path) -> Path:
     if not p.is_dir():
@@ -66,6 +79,13 @@ def _find_in_system_path(path: Path) -> Path:
         raise ValueError(f"{path} found at {full_path} but is not executable")
     return Path(full_path)
 
+
+WritableFile = Annotated[
+    Path,
+    BeforeValidator(_writable_file_validator),
+    BeforeValidator(_expand_user_validator),
+    BeforeValidator(_path_validator)
+]
 
 PathExpandUser = Annotated[
     Path,
