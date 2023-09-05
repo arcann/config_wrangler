@@ -80,6 +80,9 @@ class SQLAlchemyDatabase(Credentials):
         if values.get('dialect') in {'sqlite'}:
             values['user_id'] = 'NA'
             values['host'] = 'NA'
+        else:
+            if values.get('host', None) is None:
+                raise ValueError("host is required for databases other than sqlite")
 
         if 'create_engine_args' in values:
             create_engine_args = values['create_engine_args']

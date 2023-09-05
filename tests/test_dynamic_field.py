@@ -3,7 +3,7 @@ from typing import List, Dict
 
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
-from config_wrangler.config_types.delimited_field import DelimitedListField
+from config_wrangler.config_types.dynamically_referenced import DynamicField
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
@@ -17,9 +17,10 @@ class TestReferenceSection(ConfigHierarchy):
     #       which will be parsed as such and then since the class contained in the List
     #       or Dict is itself a ConfigHierarchy, we'll find the config data to instantiate
     #       those object instances. All instances will be of Product type -- no sub-classes.
-    list_of_products_c: List[Product] = DelimitedListField()
-    list_of_products_nl: List[Product] = DelimitedListField(delimiter='\n')
-    dict_of_products: Dict[str, Product]
+    single_product: Product = DynamicField()
+    list_of_products_c: List[Product] = DynamicField()
+    list_of_products_nl: List[Product] = DynamicField(delimiter='\n')
+    dict_of_products: Dict[str, Product] = DynamicField()
 
 
 class TestDynamicConfig(ConfigFromIniEnv):
@@ -39,9 +40,8 @@ class TestDynamicDynamicRef(unittest.TestCase, Base_Tests_Mixin):
         )
         config_sec = config.main_section
 
-        # Note: This style does not work with single item values
-        #       (although it can be a list of one value)
-        #       So this test skips testing single_product
+        self.assertEqual(config_sec.single_product.name, 'Best Pear')
+        self.assertEqual(config_sec.single_product.weight, 18)
 
         for list_of_products in [
             config_sec.list_of_products_c,
@@ -67,7 +67,7 @@ class TestDynamicDynamicRef(unittest.TestCase, Base_Tests_Mixin):
                 _ = product4.manufacturer
 
         # Test the dict_of_products
-        dict_of_products = config.main_section.dict_of_products
+        dict_of_products = config_sec.dict_of_products
         self.assertEqual(dict_of_products['apple'].name, 'Granny Smith')
         self.assertEqual(dict_of_products['banana'].name, 'Over-ripe')
 

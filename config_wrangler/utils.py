@@ -3,7 +3,6 @@ import json
 import logging
 import re
 import types
-import warnings
 from datetime import timezone, datetime
 from typing import *
 
@@ -13,7 +12,7 @@ from pydicti import dicti, Dicti
 
 from config_wrangler.config_exception import ConfigError
 from config_wrangler.config_types.delimited_field import DelimitedListFieldInfo
-from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
+from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced, DynamicFieldInfo
 
 
 # Moved here because  Pydantic V2 deprecated it
@@ -436,6 +435,7 @@ def match_config_data_to_field(
                     field_value=field_value
                 )
             )
+
     # In all cases not explicitly matched above, we'll let pydantic parse it as is
     return field_value
 
@@ -509,13 +509,34 @@ def match_config_data_to_field_or_submodel(
         if field_name not in parent_container:
             raise ValueError(f"Field {full_name(parents, field_name)} not found.")
 
-        # noinspection PyTypeChecker
-        updated_value = match_config_data_to_model(
-            model=field_info.annotation,
-            config_data=parent_container[field_name],
-            root_config_data=root_config_data,
-            parents=parents
-        )
+        if isinstance(field_info, DynamicFieldInfo):
+            ref_object_dict = build_referenced_objects(
+                field_name=field_name,
+                field_info=field_info,
+                parents=parents,
+                parent_container=parent_container,
+                root_config_data=root_config_data,
+                list_of_sections=[parent_container[field_name]],
+                inner_type=field_info.annotation,
+            )
+            if lenient_issubclass(field_info.annotation, BaseModel):
+                updated_value = list(ref_object_dict.values())[0]
+            elif lenient_issubclass(field_info.annotation, list):
+                updated_value = list(ref_object_dict.values())
+            elif lenient_issubclass(field_info.annotation, set):
+                updated_value = set(ref_object_dict.values())
+            elif lenient_issubclass(field_info.annotation, frozenset):
+                updated_value = frozenset(ref_object_dict.values())
+            elif lenient_issubclass(field_info.annotation, dict):
+                updated_value = ref_object_dict
+        else:
+            # noinspection PyTypeChecker
+            updated_value = match_config_data_to_model(
+                model=field_info.annotation,
+                config_data=parent_container[field_name],
+                root_config_data=root_config_data,
+                parents=parents
+            )
     else:
         updated_value = match_config_data_to_field(
             field_name=field_name,

@@ -2,11 +2,10 @@ from typing import *
 
 from pydantic import PrivateAttr
 
-
 try:
     import boto3
 except ImportError:
-    raise ImportError("S3_Bucket requires boto3 to be installed")
+    raise ImportError("AWS_Session requires boto3 to be installed")
 
 if TYPE_CHECKING:
     from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Key, S3_Bucket_Folder
@@ -24,12 +23,13 @@ if TYPE_CHECKING:
 from config_wrangler.config_templates.credentials import Credentials
 
 
-# AWSSession does not look right
+# AWSSession does not look right, so we added underscores
 # noinspection PyPep8Naming
 class AWS_Session(Credentials):
+    # sso_session: Optional[DynamicallyReferenced] = None
     region_name: Optional[str] = None
 
-    _session = PrivateAttr(default=None)
+    _session: boto3.session.Session = PrivateAttr(default=None)
     _service: str = PrivateAttr(default=None)
 
     @property

@@ -94,5 +94,5 @@ class TestDynamicStaticRef(unittest.TestCase, Base_Tests_Mixin):
         print("Exception str")
         print(exc_str)
         self.assertIn('main_section', exc_str)
-        self.assertIn('list_of_products', exc_str)
+        self.assertIn('list_of_products_c', exc_str)
         self.assertIn('bad_product', exc_str)

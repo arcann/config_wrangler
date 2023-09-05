@@ -12,15 +12,22 @@ FilePath = FilePath
 
 
 def _path_validator(value: Any) -> Path:
+    if value is None:
+        return None
     return Path(value)
 
 
 def _file_validator(p: Path) -> Path:
+    if p is None:
+        raise ValueError(f"{p} is not a file")
     if not p.is_file():
-        raise ValueError(f"{p} is not a directory")
+        raise ValueError(f"{p} is not a file")
     return p
 
 def _writable_file_validator(p: Path) -> Path:
+    if p is None:
+        raise ValueError(f"{p} is not a file")
+
     if p.is_file():
         if not os.access(p, os.W_OK):
             raise ValueError(f"{p} exists and is not writable")
@@ -35,22 +42,33 @@ def _writable_file_validator(p: Path) -> Path:
 
 
 def _directory_validator(p: Path) -> Path:
+    if p is None:
+        raise ValueError(f"{p} is not a directory")
+
     if not p.is_dir():
         raise ValueError(f"{p} is not a directory")
     return p
 
 
 def _expand_user_validator(p: Path) -> Path:
+    if p is None:
+        return None
     return p.expanduser()
 
 
 def _path_exists(p: Path) -> Path:
+    if p is None:
+        raise ValueError(f"Could not find path {p}")
+
     if not p.exists():
         raise ValueError(f"Could not find path {p}")
     return p
 
 
 def _ensure_exists_validator(p: Path) -> Path:
+    if p is None:
+        raise ValueError(f"Can't make None path")
+
     if not p.exists():
         p.mkdir(parents=True, exist_ok=True)
         if not p.exists():
@@ -59,6 +77,8 @@ def _ensure_exists_validator(p: Path) -> Path:
 
 
 def _find_up(path: Path) -> Path:
+    if path is None:
+        raise ValueError(f"Can't find None path")
     if path.exists():
         return path
     else:
@@ -71,6 +91,9 @@ def _find_up(path: Path) -> Path:
 
 
 def _find_in_system_path(path: Path) -> Path:
+    if path is None:
+        raise ValueError(f"Can't find None path")
+
     full_path = shutil.which(str(path))
     if full_path is None:
         raise ValueError(f"{path} not found")
