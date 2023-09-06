@@ -61,8 +61,10 @@ class SQLAlchemyDatabase(Credentials):
     def __str__(self):
         return str(self.get_uri())
 
-    @classmethod
+    # Note the order of decorators matters!
+    # noinspection PyNestedDecorators
     @model_validator(mode="before")
+    @classmethod
     def translate(cls, values):
         # Convert from old setting names to new names
         name_map = {

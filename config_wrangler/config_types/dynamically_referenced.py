@@ -22,6 +22,7 @@ class DynamicallyReferenced(ConfigHierarchy):
     """
     ref: str
 
+    # Note the order of decorators matters!
     # noinspection PyNestedDecorators
     @field_validator('ref')
     @classmethod

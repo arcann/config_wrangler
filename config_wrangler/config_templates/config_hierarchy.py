@@ -1,6 +1,6 @@
 from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Set, Generator, Tuple
 
-from pydantic import PrivateAttr, BaseModel
+from pydantic import PrivateAttr, BaseModel, ValidationError
 # noinspection PyProtectedMember
 from typing_extensions import deprecated
 
@@ -56,7 +56,14 @@ class ConfigHierarchy(BaseModel):
             if attr in data:
                 private_holding[attr] = data[attr]
                 del data[attr]
-        super().__init__(**data)
+        try:
+            super().__init__(**data)
+        except ValidationError as e:
+            # Limit the depth of the traceback
+            raise ValidationError.from_exception_data(
+                title=e.title,
+                line_errors=e.errors(),
+            ) from None
         for attr, attr_value in private_holding.items():
             setattr(__pydantic_self__, attr, attr_value)
 

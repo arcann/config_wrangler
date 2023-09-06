@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 #       https://github.com/jeshan/botostubs#notes
 
 
+# noinspection PyPep8Naming
 class S3_Bucket(AWS_Session):
     bucket_name: str
 
@@ -68,7 +69,7 @@ class S3_Bucket(AWS_Session):
             transfer_config: Optional[TransferConfig] = None,
     ):
         if transfer_config is None:
-            transfer_config = TransferConfig(multipart_threshold=5* (1024**3))  # 5 GB
+            transfer_config = TransferConfig(multipart_threshold=5 * (1024**3))  # 5 GB
 
         self.client.upload_file(
             Filename=str(local_filename),
@@ -190,13 +191,15 @@ class S3_Bucket(AWS_Session):
         return self._factory(S3_Bucket_Key, key=str(key), exclude={'folder', 'file_name'})
 
 
+# noinspection PyPep8Naming
 class S3_Bucket_Folder(S3_Bucket):
     """
         Represents a folder within an S3 bucket.
     """
     folder: str
 
-    # noinspection PyMethodParameters
+    # Note the order of decorators matters!
+    # noinspection PyMethodParameters,PyNestedDecorators
     @field_validator('folder')
     @classmethod
     def validate_folder(cls, v):
@@ -282,6 +285,7 @@ class S3_Bucket_Folder(S3_Bucket):
         return super().key_exists(key)
 
 
+# noinspection PyPep8Naming
 class S3_Bucket_Folder_File(S3_Bucket_Folder):
     """
         Represents a unique folder & file within an S3 bucket.
@@ -289,7 +293,8 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
     """
     file_name: str
 
-    # noinspection PyMethodParameters
+    # Note the order of decorators matters!
+    # noinspection PyNestedDecorators
     @field_validator('file_name')
     @classmethod
     def validate_file_name(cls, v):
@@ -345,6 +350,7 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
         return self.nav_to_key(new_path)
 
 
+# noinspection PyPep8Naming
 class S3_Bucket_Key(S3_Bucket):
     """
     Represents a unique file (key) within an S3 bucket.
@@ -352,7 +358,8 @@ class S3_Bucket_Key(S3_Bucket):
     """
     key: str
 
-    # noinspection PyMethodParameters
+    # Note the order of decorators matters!
+    # noinspection PyMethodParameters,PyNestedDecorators
     @field_validator('key')
     @classmethod
     def validate_key(cls, v):
