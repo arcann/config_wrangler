@@ -414,8 +414,9 @@ def match_config_data_to_field(
                             field_value = ref_object_dict
                 except ValueError as e2:
                     raise ConfigError(
-                        f"Field {full_name(parents, field_name)} {e}. "
-                        f"Tried as list of section references and got {e2}."
+                        f"Field {full_name(parents, field_name)}"
+                        f"Tried as list of section references and got error {e2}.\n"
+                        f"Also tried as literal and got {e}"
                     )
     elif lenient_issubclass(field_info.annotation, set):
         if isinstance(field_value, str):
@@ -529,6 +530,11 @@ def match_config_data_to_field_or_submodel(
                 updated_value = frozenset(ref_object_dict.values())
             elif lenient_issubclass(field_info.annotation, dict):
                 updated_value = ref_object_dict
+            else:
+                raise ValueError(
+                    f"Field {full_name(parents, field_name)} "
+                    f"DynamicFieldInfo type {field_info.annotation} not expected"
+                )
         else:
             # noinspection PyTypeChecker
             updated_value = match_config_data_to_model(

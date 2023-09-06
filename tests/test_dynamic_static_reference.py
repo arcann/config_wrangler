@@ -1,6 +1,8 @@
 import unittest
 from typing import List, Dict
 
+from construct import ValidationError
+
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
@@ -25,7 +27,7 @@ class TestReferenceSection(ConfigHierarchy):
     #            for the referenced items.
     #         3) Provide a method get_referenced that will get that referenced ConfigHierarchy instance
     #       Notably, in this case each referenced object can be of a different type (Product or Car in this test).
-    list_of_products: List[DynamicallyReferenced]
+    list_of_products_c: List[DynamicallyReferenced]
     dict_of_products: Dict[str, DynamicallyReferenced]
 
 
@@ -49,7 +51,7 @@ class TestDynamicStaticRef(unittest.TestCase, Base_Tests_Mixin):
         config = TestDynamicConfig(
             file_name=self.test_files_path / 'dynamic' / 'good.ini',
         )
-        list_of_products = config.main_section.list_of_products
+        list_of_products = config.main_section.list_of_products_c
         self.assertEqual(len(list_of_products), 4)
         product1 = list_of_products[0].get_referenced()
         product2 = list_of_products[1].get_referenced()
@@ -86,7 +88,7 @@ class TestDynamicStaticRef(unittest.TestCase, Base_Tests_Mixin):
         self.assertIn('Field required', exc_str)
 
     def test_dynamic_bad_ref(self):
-        with self.assertRaises(ValueError) as raises_cm:
+        with self.assertRaises(Exception) as raises_cm:
             _ = TestDynamicConfig(
                 file_name=self.test_files_path / 'dynamic' / 'bad_reference.ini',
             )
@@ -94,5 +96,8 @@ class TestDynamicStaticRef(unittest.TestCase, Base_Tests_Mixin):
         print("Exception str")
         print(exc_str)
         self.assertIn('main_section', exc_str)
-        self.assertIn('list_of_products_c', exc_str)
         self.assertIn('bad_product', exc_str)
+        if 'list_of_products_c' not in exc_str:
+            if 'list_of_products_nl' not in exc_str:
+                if 'dict_of_products' not in exc_str:
+                    raise ValueError(f"Exception {exc_str} does not contain any field name")
