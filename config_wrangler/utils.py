@@ -127,48 +127,59 @@ def interpolate_values(container: MutableMapping, root_config_data: MutableMappi
                     variables_cnt = 0
                     result_values = []
                     next_start = 0
-                    for variable_found in _interpolation_re.finditer(new_value):
-                        variables_cnt += 1
-                        variable_name = variable_found.groups()[0]
-                        var_start, var_end = variable_found.span()
+                    if isinstance(new_value, str):
+                        for variable_found in _interpolation_re.finditer(new_value):
+                            variables_cnt += 1
+                            variable_name = variable_found.groups()[0]
+                            var_start, var_end = variable_found.span()
 
-                        part_delimiter = None
-                        if ':' in variable_name:
-                            part_delimiter = ':'
+                            part_delimiter = None
+                            if ':' in variable_name:
+                                part_delimiter = ':'
 
-                        elif '.' in variable_name:
-                            part_delimiter = '.'
+                            elif '.' in variable_name:
+                                part_delimiter = '.'
 
-                        variable_replacement = 'ERROR'
-                        if part_delimiter is not None:
-                            try:
-                                variable_replacement = resolve_variable(
-                                    root_config_data,
-                                    variable_name,
-                                    part_delimiter=part_delimiter,
+                            variable_replacement = 'ERROR'
+                            if part_delimiter is not None:
+                                try:
+                                    variable_replacement = resolve_variable(
+                                        root_config_data,
+                                        variable_name,
+                                        part_delimiter=part_delimiter,
+                                    )
+                                except ValueError as e:
+                                    errors.append((section, str(e),))
+                            else:
+                                try:
+                                    # Change to case-insensitive dict
+                                    search_container = Dicti(container)
+                                    variable_replacement = search_container[variable_name]
+                                except KeyError:
+                                    errors.append((section, f"<<{variable_name} NOT FOUND>>",))
+
+                            result_values.append(new_value[next_start:var_start])
+                            result_values.append(variable_replacement)
+                            next_start = var_end
+                        if variables_cnt > 0:
+                            if next_start < len(new_value):
+                                result_values.append(new_value[next_start:])
+                            result_values = [part for part in result_values if part != '']
+                            if len(result_values) == 1:
+                                # Possibly not a string -- maybe a dict
+                                new_value = result_values[0]
+                                if not isinstance(new_value, str):
+                                    done = True
+                            else:
+                                new_value = ''.join([str(v) for v in result_values])
+
+                            if depth < 50:
+                                done = False
+                            else:
+                                raise ValueError(
+                                    f"Interpolation recursion depth limit reached on value {value} "
+                                    f"ended processing with {new_value}"
                                 )
-                            except ValueError as e:
-                                errors.append((section, str(e),))
-                        else:
-                            try:
-                                # Change to case-insensitive dict
-                                search_container = Dicti(container)
-                                variable_replacement = search_container[variable_name]
-                            except KeyError:
-                                errors.append((section, f"<<{variable_name} NOT FOUND>>",))
-
-                        result_values.append(new_value[next_start:var_start])
-                        result_values.append(variable_replacement)
-                        next_start = var_end
-                    if variables_cnt > 0:
-                        if next_start < len(new_value):
-                            result_values.append(new_value[next_start:])
-                        new_value = ''.join(result_values)
-
-                        if depth < 50:
-                            done = False
-                        else:
-                            raise ValueError(f"Interpolation recursion depth limit reached on value {value} ended with {new_value}")
                 container[section] = new_value
     return errors
 

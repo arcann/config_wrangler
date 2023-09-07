@@ -1,13 +1,10 @@
 import inspect
 import re
-from typing import *
 from configparser import RawConfigParser
 from pathlib import Path
+from typing import *
 
 from pydantic import BaseModel
-# from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE, \
-#     SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET
-# from pydantic.main import ModelMetaclass
 
 from config_wrangler.config_data_loaders.file_config_data_loader import FileConfigDataLoader
 from config_wrangler.config_types.dynamically_referenced import ListDynamicallyReferenced
@@ -85,7 +82,7 @@ class IniConfigDataLoader(FileConfigDataLoader):
     ) -> dict:
         if parents is None:
             parents = []
-        config_data_dict = config.dict()
+        config_data_dict = config.model_dump()
         if root_config_data is None:
             root_config_data = config_data_dict
         for field_name, field_info in config.model_fields.items():

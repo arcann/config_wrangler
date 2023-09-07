@@ -60,10 +60,22 @@ class ConfigHierarchy(BaseModel):
             super().__init__(**data)
         except ValidationError as e:
             # Limit the depth of the traceback
+            for error in e.errors():
+                try:
+                    location = error['ctx']['location']
+                    location_str = '.'.join(location)
+                    input_data = error['ctx']['input']
+                    # Input might not be a dict
+                    for setting, value in e.errors()['ctx']['input']:
+                        print(f"input dict for {location_str}: {setting}={value}")
+                except Exception:
+                    pass
             raise ValidationError.from_exception_data(
                 title=e.title,
                 line_errors=e.errors(),
             ) from None
+        finally:
+            pass
         for attr, attr_value in private_holding.items():
             setattr(__pydantic_self__, attr, attr_value)
 

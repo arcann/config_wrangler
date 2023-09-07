@@ -1,13 +1,12 @@
-from typing import *
 from datetime import date, datetime, time
 from enum import Enum
 from pathlib import Path
+from typing import *
 
 from pydantic import BaseModel
-# from pydantic.fields import SHAPE_LIST, SHAPE_SINGLETON, SHAPE_TUPLE, SHAPE_ITERABLE, SHAPE_SEQUENCE, \
-#     SHAPE_TUPLE_ELLIPSIS, SHAPE_SET, SHAPE_FROZENSET
 
 from config_wrangler.config_data_loaders.file_config_data_loader import FileConfigDataLoader
+from config_wrangler.config_types.dynamically_referenced import ListDynamicallyReferenced
 from config_wrangler.utils import lenient_issubclass
 
 
@@ -80,39 +79,32 @@ class TomlConfigDataLoader(FileConfigDataLoader):
     def prepare_config_data_for_save(config: BaseModel, default_delimiter='\n', parents=None) -> dict:
         if parents is None:
             parents = []
-        toml_data_dict = config.dict()
-        for field in config.model_fields.values():
-            field_value = toml_data_dict[field.alias]
-            if field.shape == SHAPE_SINGLETON and lenient_issubclass(field.type_, BaseModel):
-                toml_data_dict[field.alias] = TomlConfigDataLoader.prepare_config_data_for_save(
-                    getattr(config, field.alias),
-                    parents=parents + [field.alias]
+        config_data_dict = config.model_dump()
+        for field_name, field_info in config.model_fields.items():
+            field_name = field_info.alias or field_name
+            field_value = config_data_dict[field_name]
+            if lenient_issubclass(field_info.annotation, BaseModel):
+                config_data_dict[field_name] = TomlConfigDataLoader.prepare_config_data_for_save(
+                    getattr(config, field_name),
+                    parents=parents + [field_name]
                 )
-            elif (
-                    field.shape in {SHAPE_LIST, SHAPE_TUPLE, SHAPE_TUPLE_ELLIPSIS, SHAPE_ITERABLE, SHAPE_SEQUENCE}
-                    or field.type_ in {list, tuple}
-            ):
-                create_from_section_names = field.field_info.extra.get('create_from_section_names', False)
-                if create_from_section_names:
-                    section_name_list = []
-                    for sub_section_number, sub_section_value in enumerate(getattr(config, field.alias)):
-                        sub_section_id = f"{field.alias}_{sub_section_number}"
-                        section_name_list.append(sub_section_id)
-                        toml_data_dict[sub_section_id] = TomlConfigDataLoader.prepare_config_data_for_save(
-                            sub_section_value,
-                        )
-                    toml_data_dict[field.alias] = section_name_list
-                else:
-                    value_list = [TomlConfigDataLoader.format_value_for_save(v) for v in field_value]
-                    toml_data_dict[field.alias] = value_list
-            elif (
-                    field.shape in {SHAPE_SET, SHAPE_FROZENSET}
-                    or field.type_ in {set, frozenset}
-            ):
+            elif lenient_issubclass(field_info.annotation, ListDynamicallyReferenced):
+                section_name_list = []
+                for sub_section_number, sub_section_value in enumerate(getattr(config, field_name)):
+                    sub_section_id = f"{field_name}_{sub_section_number}"
+                    section_name_list.append(sub_section_id)
+                    config_data_dict[sub_section_id] = TomlConfigDataLoader.prepare_config_data_for_save(
+                        sub_section_value,
+                    )
+                config_data_dict[field_name] = section_name_list
+            elif lenient_issubclass(field_info.annotation, List):
                 value_list = [TomlConfigDataLoader.format_value_for_save(v) for v in field_value]
-                toml_data_dict[field.alias] = value_list
+                config_data_dict[field_name] = value_list
+            elif lenient_issubclass(field_info.annotation, Set):
+                value_list = [TomlConfigDataLoader.format_value_for_save(v) for v in field_value]
+                config_data_dict[field_name] = value_list
             else:
                 # Use python format
-                toml_data_dict[field.alias] = TomlConfigDataLoader.format_value_for_save(field_value)
+                config_data_dict[field_name] = TomlConfigDataLoader.format_value_for_save(field_value)
 
-        return toml_data_dict
+        return config_data_dict

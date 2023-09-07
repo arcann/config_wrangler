@@ -70,9 +70,12 @@ def _ensure_exists_validator(p: Path) -> Path:
         raise ValueError(f"Can't make None path")
 
     if not p.exists():
-        p.mkdir(parents=True, exist_ok=True)
-        if not p.exists():
-            raise ValueError(f"Could not create directory {p}")
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+            if not p.exists():
+                raise ValueError(f"Could not create directory {p}")
+        except Exception as e:
+            raise ValueError(f"make dir {p} yields error: {e}")
     return p
 
 
