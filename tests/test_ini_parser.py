@@ -1,4 +1,3 @@
-import json
 import os
 import unittest
 import warnings
@@ -11,7 +10,9 @@ from pydantic import Field, AnyHttpUrl, DirectoryPath
 from pydantic_core import Url
 
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
+from config_wrangler.config_root import ConfigRoot
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
+from config_wrangler.config_templates.credentials import Credentials
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
 from config_wrangler.config_types.delimited_field import DelimitedListField
@@ -473,3 +474,69 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
                     raise "keyring imported by test but not by config_wrangler"
             else:
                 raise
+
+    def test_env_password_direct_1(self):
+        class Config1(ConfigRoot):
+            test1: Credentials
+
+        password = '1$password'
+        os.environ['test1_password'] = password
+
+        config = Config1(test1={
+            'user_id': 'user1',
+            'password_source': 'ENVIRONMENT',
+        })
+
+        self.assertEqual(config.test1.get_password(), password)
+
+    def test_env_password_direct_2(self):
+        class Config1(ConfigRoot):
+            test2: Credentials
+
+        password = '2$password'
+        os.environ['user2'] = password
+
+        config = Config1(test2={
+            'user_id': 'user2',
+            'password_source': 'ENVIRONMENT',
+        })
+
+        self.assertEqual(config.test2.get_password(), password)
+
+    def test_env_password_direct_3(self):
+        class Config1(ConfigRoot):
+            test3: Credentials
+
+        password = '3$password'
+        os.environ['Password_user3'] = password
+
+        config = Config1(test3={
+            'user_id': 'user3',
+            'password_source': 'ENVIRONMENT',
+        })
+
+        self.assertEqual(config.test3.get_password(), password)
+
+    def test_env_password_keypass(self):
+        class ConfigEnvKeypass(ConfigRoot):
+            test: Credentials
+
+        # Store the keepass password in envt that will be read in
+        # since password.keepass.password_source is ENVIRONMENT
+        os.environ['KEEPASS_PASSWORD'] = 'supersecret_encryption_password'
+
+        config = ConfigEnvKeypass(**{
+            'test': {
+                'user_id': 'python_unittester_01',
+                'password_source': 'KEEPASS',
+                "keepass_group": "aws",
+            },
+            'passwords': {
+                'keepass': {
+                    'database_path': "keepass_db.kdbx",
+                    'password_source': 'ENVIRONMENT',
+                }
+            }
+        })
+        password = 'b2g4VhNSKegFMtxo49Dz'
+        self.assertEqual(password, config.test.get_password())

@@ -1,3 +1,4 @@
+import os
 import warnings
 from typing import Optional
 
@@ -95,6 +96,45 @@ class Credentials(ConfigHierarchy):
         search_info = f"{self.full_item_name()}.raw_password"
         return password, search_info
 
+    @staticmethod
+    def _get_envt_name(search_name: str) -> Optional[str]:
+        if search_name in os.environ:
+            return search_name
+        else:
+            search_name_upper = search_name.upper()
+            for envt_var in os.environ:
+                envt_var_upper = envt_var.upper()
+                if envt_var_upper == search_name_upper:
+                    return envt_var
+            return None
+
+    def _get_password_environment(self):
+        password = self.raw_password
+        if password is not None and password != '':
+            # Env loader might have already found it for us. At least we'll assume that's where it came from.
+            search_info = f"{self.full_item_name()}.raw_password"
+            return password, search_info
+        else:
+            name_in_envt = self.full_item_name(delimiter='_').replace('.', '_')
+            search_info_list = []
+            password = None
+            for envt_name_search in [
+                f"PASSWORD_{self.user_id}",
+                f"{self.user_id}_PASSWORD",
+                self.user_id,
+                f"{name_in_envt}_PASSWORD",
+            ]:
+                search_info_list.append(envt_name_search)
+                envt_name_found = self._get_envt_name(envt_name_search)
+                if envt_name_found is not None:
+                    if envt_name_found in os.environ:
+                        password = os.environ[envt_name_found]
+                        break
+            if password is None:
+                raise ValueError(f"{self.full_item_name()} password_source = ENVIRONMENT. Value not found in {search_info_list}")
+            else:
+                return password, ','.join(search_info_list)
+
     def _get_keepass_config_str_ref(self) -> KeepassConfig:
         # Try older keepass_config string reference
         keepass_config = None
@@ -191,6 +231,8 @@ class Credentials(ConfigHierarchy):
                 password, search_info = self._get_password_keyring()
             elif self.password_source == PasswordSource.CONFIG_FILE:
                 password, search_info = self._get_password_config()
+            elif self.password_source == PasswordSource.ENVIRONMENT:
+                password, search_info = self._get_password_environment()
             elif self.password_source == PasswordSource.KEEPASS:
                 password, search_info = self._get_password_keepass()
             else:

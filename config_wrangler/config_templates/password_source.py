@@ -6,6 +6,7 @@ from strenum import StrEnum
 
 class PasswordSource(StrEnum):
     CONFIG_FILE = auto()
+    ENVIRONMENT = auto()
     KEYRING = auto()
     KEEPASS = auto()
 

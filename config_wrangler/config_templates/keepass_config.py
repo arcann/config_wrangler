@@ -30,7 +30,7 @@ class KeepassConfig(ConfigHierarchy):
             if self.password_source == PasswordSource.KEYRING:
                 credentials_args['user_id'] = self.keyring_user_id
             else:
-                credentials_args['user_id'] = 'not-real-userid_config-file'
+                credentials_args['user_id'] = 'KEEPASS'
 
             from config_wrangler.config_templates.credentials import Credentials
             self._keepass_credentials = Credentials(**credentials_args)
