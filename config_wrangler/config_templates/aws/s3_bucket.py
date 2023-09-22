@@ -1,14 +1,21 @@
+from datetime import datetime, timezone
+from enum import auto, Enum
+import io
 from functools import lru_cache
 from pathlib import PurePosixPath, Path
 from typing import *
 
-from boto3.s3.transfer import TransferConfig
 from pydantic import field_validator, PrivateAttr
+# noinspection PyProtectedMember
+from typing_extensions import deprecated
 
 from config_wrangler.config_templates.aws.aws_session import AWS_Session
 
 try:
     import boto3
+    from boto3.s3.transfer import TransferConfig
+    from botocore.exceptions import ClientError
+    from botocore.response import StreamingBody
 except ImportError:
     raise ImportError("S3_Bucket requires boto3 to be installed")
 
@@ -25,18 +32,37 @@ if TYPE_CHECKING:
 #       (Help > Edit Custom Properties), then restart.
 #       https://github.com/jeshan/botostubs#notes
 
+local_timezone = datetime.now(timezone.utc).astimezone().tzinfo
+
 
 # noinspection PyPep8Naming
 class S3_Bucket(AWS_Session):
     bucket_name: str
+    key: Optional[str] = None
 
     _service: str = PrivateAttr(default='s3')
+
+    class OverwriteModes(Enum):
+        ALWAYS_OVERWRITE = auto()
+        OVERWRITE_OLDER = auto()
+        NEVER_OVERWRITE = auto()
 
     def get_bucket(self) -> 'botostubs.S3.S3Resource.Bucket':
         return self.resource.Bucket(self.bucket_name)
 
     def __str__(self):
-        return f"s3://{self.bucket_name}"
+        key = self._get_key()
+        if key == '':
+            return f"s3://{self.bucket_name}"
+        else:
+            return f"s3://{self.bucket_name}/{key}"
+
+    def __hash__(self):
+        return hash(str(self))
+
+    @staticmethod
+    def _boto3_error(ex: ClientError):
+        return ex.response['Error']['Code']
 
     @staticmethod
     @lru_cache(maxsize=128)
@@ -61,96 +87,320 @@ class S3_Bucket(AWS_Session):
         """
         return S3_Bucket._get_bucket_region(self.client, self.bucket_name)
 
+    @staticmethod
+    def _non_blank_key(key: str):
+        if key is None or str(key).strip() == '':
+            return False
+        else:
+            return True
+
+    @staticmethod
+    def _is_blank_key(key: str):
+        return not S3_Bucket._non_blank_key(key)
+
+    def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
+        if self._is_blank_key(extra_key):
+            if self._is_blank_key(self.key):
+                key = ''
+            else:
+                key = self.key
+        else:
+            if self._is_blank_key(self.key):
+                key = extra_key
+            else:
+                key = PurePosixPath(self.key) / extra_key
+
+        return key
+
     def upload_file(
             self,
+            *,
             local_filename: Union[str, Path],
-            key: Union[str, PurePosixPath],
+            key: Optional[Union[str, PurePosixPath]] = None,
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
     ):
+        key = self._get_key(key)
+
         if transfer_config is None:
             transfer_config = TransferConfig(multipart_threshold=5 * (1024**3))  # 5 GB
 
         self.client.upload_file(
             Filename=str(local_filename),
             Bucket=self.bucket_name,
-            Key=str(key),
+            Key=key,
             ExtraArgs=extra_args,
             Config=transfer_config,
         )
 
+    def open(
+        self,
+        mode: str = 'r',
+        encoding: Optional[str] = None,
+        errors: Optional[str] = None,
+    ) -> io.IOBase:
+        if mode is None or len(mode) == 0:
+            raise ValueError('open mode required')
+        if mode[0] != 'r':
+            raise ValueError('S3 open mode only supports read (r, rt, rb)')
+
+        as_text = True
+        if len(mode) > 1:
+            if mode[1] == 'b':
+                as_text = False
+
+        body: StreamingBody = self.get_object().get()['Body']
+        # noinspection PyProtectedMember
+        bytes_stream = io.BufferedReader(body._raw_stream, 8192)
+
+        if as_text:
+            return io.TextIOWrapper(
+                bytes_stream,
+                encoding=encoding,
+                errors=errors,
+            )
+        else:
+            return bytes_stream
+
+    def read_bytes(self) -> bytes:
+        with self.open('rb') as f:
+            return f.read()
+
+    def read_text(self, encoding='utf-8', errors=None) -> str:
+        with self.open('rb', encoding=encoding, errors=errors) as f:
+            return f.read()
+
+    def copy_to(self, target: Union[str, 'S3_Bucket_Key']):
+        if isinstance(target, str):
+            target = self._build_s3_bucket_key(target)
+        self_key = self._get_key()
+        self.client.copy_object(
+            Bucket=target.bucket_name,
+            Key=target.key,
+            CopySource=dict(
+                Bucket=self.bucket_name,
+                Key=self_key,
+            )
+        )
+
+    def rename(self, target: str):
+        self.copy_to(target)
+        self.delete()
+
     def download_file(
             self,
-            key: Union[str, PurePosixPath],
+            *,
             local_filename: Union[str, Path],
+            key: Optional[Union[str, PurePosixPath]] = None,
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
             create_parents: bool = True,
+            overwrite_mode: OverwriteModes = OverwriteModes.OVERWRITE_OLDER
     ):
         if create_parents:
             local_path = Path(local_filename)
             local_path.parent.mkdir(parents=True, exist_ok=True)
-        self.resource.Bucket(self.bucket_name).download_file(
-            Key=str(key),
-            Filename=str(local_filename),
-            ExtraArgs=extra_args,
-            Config=transfer_config,
-        )
 
-    def key_exists(self, key: Union[str, PurePosixPath]) -> bool:
+        if overwrite_mode in {S3_Bucket.OverwriteModes.OVERWRITE_OLDER, S3_Bucket.OverwriteModes.NEVER_OVERWRITE}:
+            local_filename = Path(local_filename)
+            if local_filename.exists():
+                if overwrite_mode == S3_Bucket.OverwriteModes.NEVER_OVERWRITE:
+                    do_download = False
+                else:  # Check ages and size
+                    bucket_object = self.get_object(key)
+                    s3_last_modified = bucket_object.last_modified
+                    s3_file_size = bucket_object.content_length
+
+                    local_stats = local_filename.stat()
+                    local_last_modified = datetime.fromtimestamp(
+                        local_stats.st_mtime,
+                        tz=local_timezone
+                    )
+                    local_file_size = local_stats.st_size
+
+                    if s3_file_size == local_file_size:
+                        if local_last_modified > s3_last_modified:
+                            do_download = False
+                        else:
+                            do_download = True
+                    else:
+                        do_download = True
+            else:
+                do_download = True
+        else:
+            do_download = True
+
+        if do_download:
+            key = self._get_key(key)
+            self.resource.Bucket(self.bucket_name).download_file(
+                Key=key,
+                Filename=str(local_filename),
+                ExtraArgs=extra_args,
+                Config=transfer_config,
+            )
+
+    def exists(self, key: Optional[Union[str, PurePosixPath]] = None) -> bool:
+        key = self._get_key(key)
+
         try:
             self.client.head_object(Bucket=self.bucket_name, Key=str(key))
             return True
-        except Exception:
-            return False
+        except ClientError as ex:
+            if self._boto3_error(ex) == 'NoSuchKey':
+                return False
+            else:
+                raise
 
-    def get_object(self, key: Union[str, PurePosixPath]):
+    @deprecated('The `key_exists` method is deprecated; use `exists` instead.', category=DeprecationWarning)
+    def key_exists(self, key: Union[str, PurePosixPath]) -> bool:
+        return self.exists(key)
+
+    @lru_cache(maxsize=512)
+    def get_object(self, key: Optional[Union[str, PurePosixPath]] = None):
+        key = self._get_key(key)
         return self.resource.Object(self.bucket_name, str(key))
 
-    def delete_by_key(self, key: Union[str, PurePosixPath], version_id: str = None):
+    def delete(
+        self,
+        key: Optional[Union[str, PurePosixPath]] = None,
+        version_id: str = None,
+    ):
+        key = self._get_key(key)
         kwargs = {
             'Bucket': self.bucket_name,
-            'Key': str(key),
+            'Key': key,
         }
         if version_id is not None:
             kwargs['VersionId'] = version_id
         self.client.delete_object(**kwargs)
 
-    def find_objects(self, key: Union[str, PurePosixPath] = None) -> Iterable['botostubs.S3.S3Resource.ObjectSummary']:
-        if key is None:
-            key = ''
-        collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=str(key))
+    def unlink(self, missing_ok=False):
+        try:
+            self.delete()
+        except ClientError as ex:
+            if self._boto3_error(ex) == 'NoSuchKey':
+                if not missing_ok:
+                    raise
+            else:
+                raise
+
+    @deprecated('The `delete_by_key` method is deprecated; use `delete` instead.', category=DeprecationWarning)
+    def delete_by_key(
+        self,
+        key: Union[str, PurePosixPath],
+        version_id: str = None,
+    ):
+        self.delete(key, version_id=version_id)
+
+    def list_objects(self, key: Optional[Union[str, PurePosixPath]] = None, ) -> Iterable['botostubs.S3.S3Resource.ObjectSummary']:
+        key = self._get_key(key)
+        collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=key)
         return collection
 
     def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
-        obj_collection = self.find_objects(key)
+        obj_collection = self.list_objects(key)
         return [obj.key for obj in obj_collection]
 
     def list_object_paths(self, key: Union[str, PurePosixPath]) -> List[PurePosixPath]:
         return [PurePosixPath(key) for key in self.list_object_keys(key)]
 
-    def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket':
-        return cast('S3_Bucket', super().get_copy(copied_by))
+    def iterdir(self) -> Iterable['S3_Bucket_Key']:
+        return [self / key for key in self.list_object_keys()]
 
-    def nav_to_key(self, key) -> 'S3_Bucket_Key':
-        return self._build_s3_bucket_key(key)
+    @staticmethod
+    def _path_to_key(path: PurePosixPath):
+        if path.name == '' and path.parent == PurePosixPath('.'):
+            return ''
+        else:
+            return str(path)
 
-    def nav_to_folder(
-            self,
-            folder: Union[str, Path]
-    ) -> 'S3_Bucket_Folder':
-        return self._build_s3_bucket_folder(folder)
+    @property
+    def parent(self):
+        key = PurePosixPath(self._get_key()).parent
+        return self._factory(S3_Bucket_Key, key=self._path_to_key(key))
 
-    def nav_to_relative_folder(
-            self,
-            folder: Union[str, Path]
-    ) -> 'S3_Bucket_Folder':
-        return self._build_s3_bucket_folder(folder)
+    @property
+    def parents(self):
+        return [self._factory(S3_Bucket_Key, key=self._path_to_key(key))
+                for key in PurePosixPath(self._get_key()).parents
+                ]
+
+    @property
+    def parts(self):
+        key = PurePosixPath(self._get_key())
+        return [self.bucket_name].extend(key.parts)
+
+    @property
+    def name(self):
+        key = PurePosixPath(self._get_key())
+        return key.name
+
+    @property
+    def suffix(self):
+        key = PurePosixPath(self._get_key())
+        return key.suffix
+
+    @property
+    def suffixes(self):
+        key = PurePosixPath(self._get_key())
+        return key.suffixes
+
+    @property
+    def stem(self):
+        key = PurePosixPath(self._get_key())
+        return key.stem
+
+    def is_relative_to(self, other: 'S3_Bucket'):
+        if self.bucket_name != other.bucket_name:
+            return False
+        else:
+            key = PurePosixPath(self._get_key())
+            other_key = PurePosixPath(other._get_key())
+            return key.relative_to(other_key)
+
+    def with_name(self, name: str):
+        key = PurePosixPath(self._get_key())
+        return self._build_s3_bucket_key(str(key.with_name(name)))
+
+    def with_stem(self, stem: str):
+        key = PurePosixPath(self._get_key())
+        return self._build_s3_bucket_key(str(key.with_stem(stem)))
+
+    def with_suffix(self, suffix: str):
+        key = PurePosixPath(self._get_key())
+        return self._build_s3_bucket_key(str(key.with_suffix(suffix)))
+
+    def content_type(self) -> str:
+        s3_obj = self.get_object()
+        val = s3_obj.get()['ContentType']
+        return val
+
+    def is_dir(self):
+        try:
+            return self.content_type() == 'application/x-directory'
+        except ClientError as ex:
+            if self._boto3_error(ex) == 'NoSuchKey':
+                # noinspection PyUnresolvedReferences
+                contents_list = list(self.list_objects().limit(5))
+                if len(contents_list) == 0:
+                    return False
+                else:
+                    return True
+            raise
+
+    def is_file(self):
+        try:
+            return self.content_type() != 'application/x-directory'
+        except ClientError as ex:
+            if self._boto3_error(ex) == 'NoSuchKey':
+                return False
+            raise
 
     def __truediv__(
             self, other: Union[str, Path]
     ) -> 'S3_Bucket_Key':
-        return self.nav_to_key(other)
+        key = self._get_key(other)
+        return self._build_s3_bucket_key(key)
 
     # noinspection SpellCheckingInspection
     def joinpath(
@@ -192,6 +442,57 @@ class S3_Bucket(AWS_Session):
 
 
 # noinspection PyPep8Naming
+class S3_Bucket_Key(S3_Bucket):
+    """
+    Represents a unique file (key) within an S3 bucket.
+    Similar to S3_Bucket but the key is required
+    """
+    key: str
+
+    # Note the order of decorators matters!
+    # noinspection PyMethodParameters,PyNestedDecorators
+    @field_validator('key')
+    @classmethod
+    def validate_key(cls, v):
+        # Handle pathlib values
+        if not isinstance(v, str):
+            v = str(v)
+        if len(v) == 0:
+            raise ValueError(f"Zero length string not a valid key")
+        return v
+
+    @deprecated("The `upload_folder_file` method is deprecated; use `my_bucket_key.upload_file() instead", category=DeprecationWarning)
+    def upload_specified_file(
+            self,
+            local_filename: Union[str, PurePosixPath],
+            extra_args: Optional[dict] = None,
+            transfer_config: Optional[TransferConfig] = None,
+    ):
+        super().upload_file(
+            local_filename=local_filename,
+            key=self.key,
+            extra_args=extra_args,
+            transfer_config=transfer_config,
+        )
+
+    @deprecated("The `upload_folder_file` method is deprecated; use `my_bucket_key.download_file() instead", category=DeprecationWarning)
+    def download_specified_file(
+            self,
+            local_filename: Union[str, PurePosixPath],
+            extra_args: Optional[dict] = None,
+            transfer_config: Optional[TransferConfig] = None,
+            create_parents: bool = True,
+    ):
+        super().download_file(
+            local_filename=local_filename,
+            key=self.key,
+            extra_args=extra_args,
+            transfer_config=transfer_config,
+            create_parents=create_parents,
+        )
+
+
+# noinspection PyPep8Naming
 class S3_Bucket_Folder(S3_Bucket):
     """
         Represents a folder within an S3 bucket.
@@ -210,12 +511,13 @@ class S3_Bucket_Folder(S3_Bucket):
             raise ValueError(f"Zero length string not a valid folder")
         return v
 
-    def __str__(self):
-        return f"s3://{self.bucket_name}/{self.folder}"
+    def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
+        if self._non_blank_key(extra_key):
+            return str(PurePosixPath(self.folder) / extra_key)
+        else:
+            return self.folder
 
-    def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket_Folder':
-        return cast('S3_Bucket_Folder', super().get_copy(copied_by))
-
+    @deprecated("The `upload_folder_file` method is deprecated; use `(my_folder / key_suffix).download_file() instead", category=DeprecationWarning)
     def upload_folder_file(
             self,
             local_filename: Union[str, Path],
@@ -223,6 +525,9 @@ class S3_Bucket_Folder(S3_Bucket):
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
     ):
+        """
+        Differs from upload_file in that it requires a key_suffix to add after the folder name
+        """
         full_key = PurePosixPath(self.folder, key_suffix)
         super().upload_file(
             local_filename=local_filename,
@@ -231,6 +536,7 @@ class S3_Bucket_Folder(S3_Bucket):
             transfer_config=transfer_config,
         )
 
+    @deprecated("The `download_folder_file` method is deprecated; use `(my_folder / key_suffix).upload_file() instead", category=DeprecationWarning)
     def download_folder_file(
             self,
             key_suffix: Union[str, PurePosixPath],
@@ -239,6 +545,9 @@ class S3_Bucket_Folder(S3_Bucket):
             transfer_config: Optional[TransferConfig] = None,
             create_parents: bool = True,
     ):
+        """
+        Differs from download_file in that it requires a key_suffix to add after the folder name
+        """
         full_key = PurePosixPath(self.folder, key_suffix)
         super().download_file(
             key=full_key,
@@ -247,42 +556,6 @@ class S3_Bucket_Folder(S3_Bucket):
             transfer_config=transfer_config,
             create_parents=create_parents,
         )
-
-    def nav_to_folder(self, folder_key: Union[str, Path]) -> 'S3_Bucket_Folder':
-        return self._build_s3_bucket_folder(folder_key)
-
-    def nav_to_relative_folder(self, folder: Union[str, Path]) -> 'S3_Bucket_Folder':
-        new_path = PurePosixPath(self.folder) / folder
-        return self.nav_to_folder(new_path)
-
-    def nav_to_file(
-            self,
-            file_name: Union[str, Path]
-    ) -> 'S3_Bucket_Folder_File':
-        return self._build_s3_bucket_folder_file(
-            file_name
-        )
-
-    def __truediv__(
-            self, other: Union[str, Path]
-    ) -> 'S3_Bucket_Key':
-        new_path = PurePosixPath(self.folder) / other
-        return self.nav_to_key(new_path)
-
-    def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
-        if key is None:
-            key = self.folder
-        return super().list_object_keys(key=key)
-
-    def list_object_paths(self, key: Union[str, PurePosixPath] = None) -> List[PurePosixPath]:
-        if key is None:
-            key = self.folder
-        return super().list_object_paths(key=key)
-
-    def key_exists(self, key: Union[str, PurePosixPath] = None) -> bool:
-        if key is None:
-            key = self.folder
-        return super().key_exists(key)
 
 
 # noinspection PyPep8Naming
@@ -305,12 +578,13 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
             raise ValueError(f"Zero length string not a valid file_name")
         return v
 
-    def __str__(self):
-        return f"s3://{self.bucket_name}/{self.folder}/{self.file_name}"
+    def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
+        if self._non_blank_key(extra_key):
+            return str(PurePosixPath(self.folder) / self.file_name / extra_key)
+        else:
+            return str(PurePosixPath(self.folder) / self.file_name)
 
-    def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket_Folder_File':
-        return cast('S3_Bucket_Folder_File', super().get_copy(copied_by))
-
+    @deprecated("The `upload_folder_file` method is deprecated; use `my_folder_file.upload_file() instead", category=DeprecationWarning)
     def upload_specified_file(
         self,
         local_filename: Union[str, PurePosixPath],
@@ -324,6 +598,7 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
             transfer_config=transfer_config,
         )
 
+    @deprecated("The `upload_folder_file` method is deprecated; use `my_folder_file.download_file() instead", category=DeprecationWarning)
     def download_specified_file(
         self,
         local_filename: Union[str, PurePosixPath],
@@ -336,121 +611,3 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
             extra_args=extra_args,
             transfer_config=transfer_config,
         )
-
-    def get_object(self, key: Union[str, PurePosixPath] = None):
-        if key is None:
-            key = f"{self.folder}/{self.file_name}"
-        return super().get_object(key=key)
-
-    def __truediv__(
-            self, other: Union[str, Path]
-    ) -> 'S3_Bucket_Key':
-        # Probably an error but we can try assuming that file_name is actually a folder name
-        new_path = PurePosixPath(self.folder) / self.file_name / other
-        return self.nav_to_key(new_path)
-
-
-# noinspection PyPep8Naming
-class S3_Bucket_Key(S3_Bucket):
-    """
-    Represents a unique file (key) within an S3 bucket.
-    Similar to S3_Bucket_Folder_File but uses a single key instead of folder + file_name
-    """
-    key: str
-
-    # Note the order of decorators matters!
-    # noinspection PyMethodParameters,PyNestedDecorators
-    @field_validator('key')
-    @classmethod
-    def validate_key(cls, v):
-        # Handle pathlib values
-        if not isinstance(v, str):
-            v = str(v)
-        if len(v) == 0:
-            raise ValueError(f"Zero length string not a valid key")
-        return v
-
-    def __str__(self):
-        return f"s3://{self.bucket_name}/{self.key}"
-
-    def get_copy(self, copied_by: str = 'get_copy') -> 'S3_Bucket_Key':
-        return cast('S3_Bucket_Key', super().get_copy(copied_by))
-
-    def nav_to_key(self, key) -> 'S3_Bucket_Key':
-        return self._build_s3_bucket_key(key)
-
-    def upload_specified_file(
-        self,
-        local_filename: Union[str, PurePosixPath],
-        extra_args: Optional[dict] = None,
-        transfer_config: Optional[TransferConfig] = None,
-    ):
-        super().upload_file(
-            local_filename=local_filename,
-            key=self.key,
-            extra_args=extra_args,
-            transfer_config=transfer_config,
-        )
-
-    def download_specified_file(
-        self,
-        local_filename: Union[str, PurePosixPath],
-        extra_args: Optional[dict] = None,
-        transfer_config: Optional[TransferConfig] = None,
-        create_parents: bool = True,
-    ):
-        super().download_file(
-            local_filename=local_filename,
-            key=self.key,
-            extra_args=extra_args,
-            transfer_config=transfer_config,
-            create_parents=create_parents,
-        )
-
-    def get_object(self, key: Union[str, PurePosixPath] = None, version_id=None):
-        if key is None:
-            key = self.key
-        return super().get_object(key=key)
-
-    def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
-        if key is None:
-            key = self.key
-        return super().list_object_keys(key=key)
-
-    def list_object_paths(self, key: Union[str, PurePosixPath] = None) -> List[PurePosixPath]:
-        if key is None:
-            key = self.key
-        return super().list_object_paths(key=key)
-
-    def find_objects(self, key: Union[str, PurePosixPath] = None) -> Iterable['botostubs.S3.S3Resource.ObjectSummary']:
-        if key is None:
-            key = self.key
-        return super().find_objects(key)
-
-    def nav_to_folder(
-            self,
-            folder: Union[str, Path]
-    ) -> 'S3_Bucket_Folder':
-        return self._build_s3_bucket_folder(folder)
-
-    def nav_to_relative_folder(
-            self,
-            folder: Union[str, Path]
-    ) -> 'S3_Bucket_Folder':
-        new_path = PurePosixPath(self.key) / folder
-        return self.nav_to_folder(new_path)
-
-    def nav_to_file(
-            self,
-            file_name: Union[str, Path]
-    ) -> 'S3_Bucket_Folder_File':
-        return self._build_s3_bucket_folder_file(
-            folder=self.key,
-            file_name=file_name
-        )
-
-    def __truediv__(
-            self, other: Union[str, Path]
-    ) -> 'S3_Bucket_Key':
-        new_path = PurePosixPath(self.key) / other
-        return self.nav_to_key(new_path)

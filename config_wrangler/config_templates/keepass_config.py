@@ -10,6 +10,7 @@ from config_wrangler.config_types.path_types import PathFindUpExpandUser
 
 @public
 class KeepassConfig(ConfigHierarchy):
+    user_id: str = 'KEEPASS'
     database_path: PathFindUpExpandUser
     default_group: Optional[str] = None
     password_source: PasswordSourceValidated = PasswordSource.KEYRING

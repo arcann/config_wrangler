@@ -1,10 +1,13 @@
+import os
 import unittest
+from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 
 import boto3
 import moto
 
-from config_wrangler.config_templates.credentials import PasswordSource
 from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Folder
+from config_wrangler.config_templates.credentials import PasswordSource
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
@@ -35,18 +38,39 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             }
         )
 
+        self.file1_path = self.get_test_files_path() / 'test_good.ini'
+        self.file2_path = self.get_test_files_path() / 'test_bad_interpolations.ini'
+
         self.example1_key = 'test_good.ini'
         self.mock_client.upload_file(
             Bucket=self.bucket1_name,
             Key=self.example1_key,
-            Filename=str(self.get_test_files_path() / 'test_good.ini')
+            Filename=str(self.file1_path)
         )
         self.example2_key = 'folder1/file.txt'
         self.mock_client.upload_file(
             Bucket=self.bucket1_name,
             Key=self.example2_key,
-            Filename=str(self.get_test_files_path() / 'test_good.ini')
+            Filename=str(self.file1_path)
         )
+
+    def test_is_dir_is_file(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        file = bucket / self.example1_key
+        folder = bucket / 'folder1'
+        dne_file = folder / 'this_does_not_exist'
+
+        self.assertFalse(file.is_dir())
+        self.assertTrue(folder.is_dir())
+
+        self.assertTrue(file.is_file())
+        self.assertFalse(folder.is_file())
+        self.assertFalse(dne_file.is_file())
 
     def test_list_files(self):
         bucket = S3_Bucket(
@@ -80,6 +104,17 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         )
         self.assertEqual(bucket3.get_bucket_region(), self.bucket3_region)
 
+    def test_iter_files(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        contents = list(bucket.iterdir())
+        self.assertIn(bucket / self.example1_key, contents)
+        self.assertIn(bucket / self.example2_key, contents)
+
     def test_list_folder_files(self):
         bucket_folder = S3_Bucket_Folder(
             bucket_name=self.bucket1_name,
@@ -93,8 +128,14 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         self.assertIn(self.example2_key, contents)
         self.assertEqual(len(contents), 1)
 
-        # Ask for a different folder
-        contents = bucket_folder.list_object_keys(key='')
+        # Ask for parent folder
+        contents = bucket_folder.parent.list_object_keys()
+        self.assertIn(self.example1_key, contents)
+        self.assertIn(self.example2_key, contents)
+        self.assertEqual(len(contents), 2)
+
+        # Use parents to get folder
+        contents = bucket_folder.parents[-1].list_object_keys()
         self.assertIn(self.example1_key, contents)
         self.assertIn(self.example2_key, contents)
         self.assertEqual(len(contents), 2)
@@ -144,22 +185,22 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         )
         session = bucket.session
 
-        folder_key = bucket.nav_to_folder('folder1')
-        self.assertEqual("folder1", str(folder_key.folder))
+        folder_key = bucket / 'folder1'
+        self.assertEqual('folder1', str(folder_key.key))
         self.assertEqual(bucket.bucket_name, folder_key.bucket_name)
         self.assertEqual(bucket.user_id, folder_key.user_id)
         self.assertEqual(bucket.get_password(), folder_key.get_password())
         self.assertTrue(folder_key.session is session)
 
-        folder_key2 = folder_key.nav_to_folder('folder2')
-        self.assertEqual("folder2", str(folder_key2.folder))
+        folder_key2 = folder_key / 'folder2'
+        self.assertEqual('folder1/folder2', folder_key2.key)
         self.assertEqual(bucket.bucket_name, folder_key2.bucket_name)
         self.assertEqual(bucket.user_id, folder_key2.user_id)
         self.assertEqual(bucket.get_password(), folder_key2.get_password())
         self.assertTrue(folder_key2.session is session)
 
-        folder_key3 = folder_key.nav_to_relative_folder('folder3')
-        self.assertEqual("folder1/folder3", str(folder_key3.folder))
+        folder_key3 = folder_key / 'folder3'
+        self.assertEqual("folder1/folder3", str(folder_key3.key))
         self.assertEqual(bucket.bucket_name, folder_key3.bucket_name)
         self.assertEqual(bucket.user_id, folder_key3.user_id)
         self.assertEqual(bucket.get_password(), folder_key3.get_password())
@@ -191,22 +232,165 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         )
         session = bucket_folder.session
 
-        bucket_file = bucket_folder.nav_to_file('file.json')
-        self.assertEqual("file.json", str(bucket_file.file_name))
-        self.assertEqual(bucket_folder.folder, str(bucket_file.folder))
+        bucket_file = bucket_folder / 'file.json'
+        self.assertEqual(str(PurePosixPath('folder1') / "file.json"), str(bucket_file.key))
         self.assertEqual(bucket_folder.bucket_name, bucket_file.bucket_name)
         self.assertEqual(bucket_folder.user_id, bucket_file.user_id)
         self.assertEqual(bucket_folder.get_password(), bucket_file.get_password())
         self.assertTrue(bucket_file.session is session)
 
         bucket_key = bucket_folder / 'folder2'
-        bucket_file2 = bucket_key.nav_to_file('file.csv')
-        self.assertEqual("file.csv", str(bucket_file2.file_name))
-        self.assertEqual(bucket_key.key, str(bucket_file2.folder))
+        bucket_file2 = bucket_key / 'file.csv'
+        self.assertEqual('folder1/folder2/file.csv', bucket_file2.key)
         self.assertEqual(bucket_folder.bucket_name, bucket_file2.bucket_name)
         self.assertEqual(bucket_folder.user_id, bucket_file2.user_id)
         self.assertEqual(bucket_folder.get_password(), bucket_file2.get_password())
         self.assertTrue(bucket_file2.session is session)
 
+    def test_open(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        file1 = bucket / self.example1_key
+
+        # Binary explicit
+        with file1.open('rb') as bf:
+            bf_contents = bf.read()
+        with self.file1_path.open('rb') as lf:
+            lf_contents = lf.read()
+        self.assertEqual(lf_contents, bf_contents)
+
+        # Text explicit
+        with file1.open('rt', encoding='utf-8') as bf:
+            bf_contents = bf.read()
+        with self.file1_path.open('rt', encoding='utf-8') as lf:
+            lf_contents = lf.read()
+        self.assertEqual(lf_contents, bf_contents)
+
+        # Text default and using readlines
+        with file1.open('r', encoding='utf-8') as bf:
+            bf_contents = bf.readlines()
+        with self.file1_path.open('r', encoding='utf-8') as lf:
+            lf_contents = lf.readlines()
+        self.assertEqual(lf_contents, bf_contents)
+
+    def _assert_files_equal(self, path1: Path, path2: Path):
+        with path1.open('rb') as f1:
+            with path2.open('rb') as f2:
+                self.assertEqual(f1.read(), f2.read())
+
+    def test_download(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+
+        with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_path = Path(tmp)
+            tmp_file = tmp_path / 'path1'
+
+            bucket.download_file(
+                local_filename=tmp_file,
+                key=str(self.example1_key),
+            )
+            self._assert_files_equal(self.file1_path, tmp_file)
+
+            # Test default overwrite (OVERWRITE_OLDER)
+            local_time_before = tmp_file.stat().st_mtime
+            bucket.download_file(
+                local_filename=tmp_file,
+                key=str(self.example1_key),
+            )
+            local_time_after = tmp_file.stat().st_mtime
+            self.assertEqual(
+                local_time_before,
+                local_time_after,
+            )
+
+            # Test if OVERWRITE_OLDER but it is not
+            bucket.download_file(
+                local_filename=tmp_file,
+                key=str(self.example1_key),
+                overwrite_mode=S3_Bucket.OverwriteModes.OVERWRITE_OLDER
+            )
+            local_time_after = tmp_file.stat().st_mtime
+            self.assertEqual(
+                local_time_before,
+                local_time_after
+            )
+
+            # Make the local file appear older
+            old_time = 946702800.0
+            os.utime(tmp_file, (old_time, old_time))
+
+            # Test do not overwrite
+            test_overwrite_newer_s3 = 'do_not_overwrite.test'
+            # upload a new file
+            bucket.upload_file(
+                local_filename=self.file1_path,
+                key=test_overwrite_newer_s3
+            )
+            bucket.download_file(
+                local_filename=tmp_file,
+                key=test_overwrite_newer_s3,
+                overwrite_mode=S3_Bucket.OverwriteModes.NEVER_OVERWRITE
+            )
+            local_time_after = tmp_file.stat().st_mtime
+            self.assertEqual(
+                old_time,
+                local_time_after
+            )
+
+            # Test OVERWRITE_OLDER and local is older
+            bucket.download_file(
+                local_filename=tmp_file,
+                key=test_overwrite_newer_s3,
+                overwrite_mode=S3_Bucket.OverwriteModes.OVERWRITE_OLDER
+            )
+            local_time_after = tmp_file.stat().st_mtime
+            self.assertLess(
+                local_time_before,
+                local_time_after
+            )
+
+            # Test ALWAYS_OVERWRITE
+            bucket.download_file(
+                local_filename=tmp_file,
+                key=test_overwrite_newer_s3,
+                overwrite_mode=S3_Bucket.OverwriteModes.ALWAYS_OVERWRITE
+            )
+            local_time_after_always = tmp_file.stat().st_mtime
+            self.assertLess(
+                local_time_after,
+                local_time_after_always
+            )
+
+            tmp_file.unlink()
+            bucket_file = bucket / self.example1_key
+            bucket_file.download_file(local_filename=tmp_file)
+            self._assert_files_equal(self.file1_path, tmp_file)
+
     def test_bucket_upload(self):
-        pass
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+
+        for key in [
+            'uploaded_file.ini',
+            'folder2/file2.ini',
+        ]:
+            bucket.upload_file(
+                local_filename=self.file2_path,
+                key=key,
+            )
+
+            contents = bucket.list_object_keys()
+            self.assertIn(key, contents)
