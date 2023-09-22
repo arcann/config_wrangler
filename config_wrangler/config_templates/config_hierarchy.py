@@ -1,4 +1,7 @@
-from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Set, Generator, Tuple
+from __future__ import annotations
+
+import json
+from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Set, Generator, Tuple, Literal
 
 from pydantic import PrivateAttr, BaseModel, ValidationError
 # noinspection PyProtectedMember
@@ -213,3 +216,26 @@ class ConfigHierarchy(BaseModel):
             if key in self._private_value_atts and value is not None:
                 value = '*' * 8
             yield key, value
+
+    def model_dump_non_private(
+            self,
+            *,
+            mode: Literal['json', 'python'] | str = 'python',
+            exclude: Set[str] = None,
+    ) -> dict[str, Any]:
+
+        result = dict()
+
+        if exclude is None:
+            exclude = {}
+
+        for key, value in self:
+            if key not in exclude:
+                if isinstance(value, ConfigHierarchy):
+                    result[key] = value.model_dump_safe(mode=mode, exclude=exclude)
+                else:
+                    if mode == 'json':
+                        result[key] = json.dumps(value)
+                    else:
+                        result[key] = value
+        return result
