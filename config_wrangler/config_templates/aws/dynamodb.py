@@ -8,21 +8,30 @@ from pydantic import PrivateAttr
 from config_wrangler.config_templates.aws.aws_session import AWS_Session
 
 if TYPE_CHECKING:
-    try:
-        import botostubs
-    except ImportError:
-        botostubs = None
+    # https://youtype.github.io/boto3_stubs_docs/mypy_boto3_dynamodb/
+    from mypy_boto3_dynamodb.service_resource import DynamoDBServiceResource
+    from mypy_boto3_dynamodb.client import DynamoDBClient
+    from mypy_boto3_dynamodb.service_resource import Table
+    from mypy_boto3_dynamodb.type_defs import PutItemOutputTableTypeDef
 
 
 class DynamoDB(AWS_Session):
     _service: str = PrivateAttr(default='dynamodb')
     scan_progress_seconds: int = 10
 
+    @property
+    def resource(self) -> 'DynamoDBServiceResource':
+        return super().resource
+
+    @property
+    def client(self) -> 'DynamoDBClient':
+        return super().client
+
     def get_dynamo_table(
             self,
             dynamo_table_name,
             region_name: str = None
-    ) -> 'botostubs.DynamoDB.DynamodbResource.Table':
+    ) -> 'Table':
         if region_name is not None:
             warnings.warn(
                 "DynamoDB.get_dynamo_table argument region_name is deprecated. "
@@ -40,9 +49,9 @@ class DynamoDB(AWS_Session):
 
     def query_dynamo_table(
             self,
-            dynamo_table: 'botostubs.DynamoDB.DynamodbResource.Table',
+            dynamo_table: 'Table',
             scan_args_list: Iterator[dict],
-    ) -> Iterator[dict]:
+    ) -> Iterable[dict]:
         log = logging.getLogger('DynamoDB')
         data = []
 
@@ -69,13 +78,13 @@ class DynamoDB(AWS_Session):
             dynamo_table_name: str,
             scan_args_list: Iterator[dict],
             region_name: str = None,  # Deprecated
-    ) -> Iterator[dict]:
+    ) -> Iterable[dict]:
         dynamo_table = self.get_dynamo_table(dynamo_table_name, region_name=region_name)
         return self.query_dynamo_table(dynamo_table, scan_args_list)
 
     def scan_dynamo_table(
-            self,
-            dynamo_table: 'botostubs.DynamoDB.DynamodbResource.Table',
+        self,
+        dynamo_table: 'Table',
     ):
         log = logging.getLogger('DynamoDB')
         data = []
@@ -104,10 +113,10 @@ class DynamoDB(AWS_Session):
         return self.scan_dynamo_table(dynamo_table)
 
 
-class DynamoDB_Table(DynamoDB):
+class DynamoDBTable(DynamoDB):
     table_name: str
 
-    def get_dynamo_table(self, **kwargs) -> 'botostubs.DynamoDB.DynamodbResource.Table':
+    def get_dynamo_table(self, **kwargs) -> 'Table':
         parent_table_arg = 'dynamo_table_name'
         if parent_table_arg in kwargs and kwargs[parent_table_arg] is not None:
             return super().get_dynamo_table(dynamo_table_name=kwargs[parent_table_arg])
@@ -118,7 +127,7 @@ class DynamoDB_Table(DynamoDB):
             self,
             scan_args_list: Iterator[dict],
             **kwargs
-    ) -> Iterator[dict]:
+    ) -> Iterable[dict]:
         parent_table_arg = 'dynamo_table_name'
         if parent_table_arg in kwargs and kwargs[parent_table_arg] is not None:
             return super().query_dynamo_table(
@@ -132,8 +141,8 @@ class DynamoDB_Table(DynamoDB):
             )
 
     def scan_dynamo_table(
-            self,
-            **kwargs
+        self,
+        **kwargs
     ):
         parent_table_arg = 'dynamo_table'
         if parent_table_arg in kwargs and kwargs[parent_table_arg] is not None:
@@ -145,5 +154,5 @@ class DynamoDB_Table(DynamoDB):
                 dynamo_table=self.get_dynamo_table(),
             )
 
-    def put_item(self, Item: 'botostubs.DynamoDB.PutItemInputAttributeMap') -> dict:
-        return self.get_dynamo_table().put_item()
+    def put_item(self, item: Mapping[str, Any]) -> 'PutItemOutputTableTypeDef':
+        return self.get_dynamo_table().put_item(Item=item)

@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import PurePosixPath, Path
 from typing import *
 
+from cachetools import cached, TTLCache
 from pydantic import field_validator, PrivateAttr
 # noinspection PyProtectedMember
 from typing_extensions import deprecated
@@ -20,17 +21,19 @@ except ImportError:
     raise ImportError("S3_Bucket requires boto3 to be installed")
 
 if TYPE_CHECKING:
-    try:
-        import botostubs
-    except ImportError:
-        botostubs = None
+    # https://youtype.github.io/boto3_stubs_docs/mypy_boto3_s3/client/
+    from mypy_boto3_s3.client import S3Client
 
+    # https://youtype.github.io/boto3_stubs_docs/mypy_boto3_s3/service_resource/
+    from mypy_boto3_s3.service_resource import Bucket
+    from mypy_boto3_s3.service_resource import Object
+    from mypy_boto3_s3.service_resource import BucketObjectsCollection
+    from mypy_boto3_s3.service_resource import S3ServiceResource
 
-# NOTE: If you are not seeing botostubs code completion in Intellij-based IDEs,
+# NOTE: If you are not seeing boto3-stubs code completion in Intellij-based IDEs,
 #       please increase the intellisense filesize limit
 #       e.g `idea.max.intellisense.filesize=20000` in IDE custom properties
 #       (Help > Edit Custom Properties), then restart.
-#       https://github.com/jeshan/botostubs#notes
 
 local_timezone = datetime.now(timezone.utc).astimezone().tzinfo
 
@@ -47,7 +50,7 @@ class S3_Bucket(AWS_Session):
         OVERWRITE_OLDER = auto()
         NEVER_OVERWRITE = auto()
 
-    def get_bucket(self) -> 'botostubs.S3.S3Resource.Bucket':
+    def get_bucket(self) -> 'Bucket':
         return self.resource.Bucket(self.bucket_name)
 
     def __str__(self):
@@ -59,6 +62,14 @@ class S3_Bucket(AWS_Session):
 
     def __hash__(self):
         return hash(str(self))
+
+    @property
+    def resource(self) -> 'S3ServiceResource':
+        return super().resource
+
+    @property
+    def client(self) -> 'S3Client':
+        return super().client
 
     @staticmethod
     def _boto3_error(ex: ClientError):
@@ -150,7 +161,7 @@ class S3_Bucket(AWS_Session):
                 as_text = False
 
         body: StreamingBody = self.get_object().get()['Body']
-        # noinspection PyProtectedMember
+        # noinspection PyProtectedMember,PyTypeChecker
         bytes_stream = io.BufferedReader(body._raw_stream, 8192)
 
         if as_text:
@@ -255,10 +266,13 @@ class S3_Bucket(AWS_Session):
     def key_exists(self, key: Union[str, PurePosixPath]) -> bool:
         return self.exists(key)
 
-    @lru_cache(maxsize=512)
-    def get_object(self, key: Optional[Union[str, PurePosixPath]] = None):
+    def get_object_uncached(self, key: Optional[Union[str, PurePosixPath]] = None) -> 'Object':
         key = self._get_key(key)
         return self.resource.Object(self.bucket_name, str(key))
+
+    @cached(cache=TTLCache(maxsize=1024, ttl=10))
+    def get_object(self, key: Optional[Union[str, PurePosixPath]] = None) -> 'Object':
+        return self.get_object_uncached(key)
 
     def delete(
         self,
@@ -292,7 +306,7 @@ class S3_Bucket(AWS_Session):
     ):
         self.delete(key, version_id=version_id)
 
-    def list_objects(self, key: Optional[Union[str, PurePosixPath]] = None, ) -> Iterable['botostubs.S3.S3Resource.ObjectSummary']:
+    def list_objects(self, key: Optional[Union[str, PurePosixPath]] = None, ) -> 'BucketObjectsCollection':
         key = self._get_key(key)
         collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=key)
         return collection
@@ -304,6 +318,7 @@ class S3_Bucket(AWS_Session):
     def list_object_paths(self, key: Union[str, PurePosixPath]) -> List[PurePosixPath]:
         return [PurePosixPath(key) for key in self.list_object_keys(key)]
 
+    # noinspection SpellCheckingInspection
     def iterdir(self) -> Iterable['S3_Bucket_Key']:
         return [self / key for key in self.list_object_keys()]
 

@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import model_validator, PrivateAttr
 
-
 try:
     # noinspection PyPackageRequirements
     from sqlalchemy.engine import Engine
@@ -25,6 +24,9 @@ except ImportError:
     raise ImportError("SQLAlchemyDatabase requires sqlalchemy to be installed")
 
 from config_wrangler.config_templates.credentials import Credentials
+
+if TYPE_CHECKING:
+    from mypy_boto3_redshift.client import RedshiftClient
 
 
 class SQLAlchemyDatabase(Credentials):
@@ -46,10 +48,11 @@ class SQLAlchemyDatabase(Credentials):
     encoding: Optional[str] = None
     poolclass: Optional[str] = None
 
-    # Private attribute used to hold the redshift client
+    # Private attribute used to hold the engine
     _engine = PrivateAttr(default=None)
     _sqlite_connection = PrivateAttr(default=None)
-    _rs_client = PrivateAttr(default=None)
+    # Private attribute used to hold the redshift client
+    _rs_client: 'RedshiftClient' = PrivateAttr(default=None)
     _rs_credential_expiry: datetime = PrivateAttr(default=None)
 
     # Values to hide from config exports
@@ -112,6 +115,7 @@ class SQLAlchemyDatabase(Credentials):
             # Bypass password checks
             return self
         else:
+            # noinspection PyCallingNonCallable
             return Credentials.check_model(self)
 
     def get_password(self) -> str:
@@ -211,6 +215,7 @@ class SQLAlchemyDatabase(Credentials):
                     username=user_id,
                     password=password,
                     database=self.database_name,
+                    query={},
                 )
 
     def get_engine(self) -> Engine:
@@ -232,7 +237,7 @@ class SQLAlchemyDatabase(Credentials):
 
             self._engine = create_engine(self.get_uri(), **kwargs)
 
-            # Make an event listener so we can get new RS credentials if needed
+            # Make an event listener, so we can get new RS credentials if needed
             @event.listens_for(self._engine, 'do_connect', named=True)
             def engine_do_connect(**kw):
                 """
@@ -265,22 +270,5 @@ class SQLAlchemyDatabase(Credentials):
         else:
             return self.get_engine().connect()
 
-    def session(self, autocommit: bool = False) -> Session:
-        return Session(bind=self.get_engine(), autocommit=autocommit)
-
-
-class SQLAlchemyMetadata(SQLAlchemyDatabase):
-    # Note: we can't name this field schema since that conflicts with pydantic
-    database_schema: str = None
-    quote_schema: str = None
-    naming_convention: dict = DEFAULT_NAMING_CONVENTION
-
-    def get_metadata(
-            self,
-    ) -> MetaData:
-        engine = self.get_engine()
-        return MetaData(
-            bind=engine,
-            schema=self.database_schema,
-            quote_schema=self.quote_schema
-        )
+    def session(self) -> Session:
+        return Session(bind=self.get_engine())
