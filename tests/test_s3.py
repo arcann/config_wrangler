@@ -1,3 +1,4 @@
+import logging
 import os
 import unittest
 from pathlib import Path, PurePosixPath
@@ -14,6 +15,7 @@ from tests.base_tests_mixin import Base_Tests_Mixin
 @moto.mock_s3
 class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
+        logging.basicConfig(level=logging.INFO)
         self.mock_client = boto3.client('s3')
         self.bucket1_name = 'mock_bucket'
         self.mock_client.create_bucket(
@@ -22,6 +24,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         )
         self.bucket2_name = 'mock_bucket2'
         self.bucket2_region = 'us-west-1'
+        # noinspection PyTypeChecker
         self.mock_client.create_bucket(
             Bucket=self.bucket2_name,
             CreateBucketConfiguration={
@@ -31,6 +34,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
 
         self.bucket3_name = 'mock_bucket3'
         self.bucket3_region = 'eu-central-1'
+        # noinspection PyTypeChecker
         self.mock_client.create_bucket(
             Bucket=self.bucket3_name,
             CreateBucketConfiguration={
@@ -54,7 +58,21 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             Filename=str(self.file1_path)
         )
 
-    def test_is_dir_is_file(self):
+        self.example3_key = 'folder1/file2.txt'
+        self.mock_client.upload_file(
+            Bucket=self.bucket1_name,
+            Key=self.example3_key,
+            Filename=str(self.file1_path)
+        )
+
+        self.example4_key = 'folder2/file3.txt'
+        self.mock_client.upload_file(
+            Bucket=self.bucket1_name,
+            Key=self.example4_key,
+            Filename=str(self.file2_path)
+        )
+
+    def test_is_file(self):
         bucket = S3_Bucket(
             bucket_name=self.bucket1_name,
             user_id='mock_user',
@@ -62,14 +80,12 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             password_source=PasswordSource.CONFIG_FILE,
         )
         file = bucket / self.example1_key
-        folder = bucket / 'folder1'
-        dne_file = folder / 'this_does_not_exist'
-
-        self.assertFalse(file.is_dir())
-        self.assertTrue(folder.is_dir())
+        folder1 = bucket / 'folder1'
 
         self.assertTrue(file.is_file())
-        self.assertFalse(folder.is_file())
+        self.assertFalse(folder1.is_file())
+
+        dne_file = folder1 / 'this_does_not_exist'
         self.assertFalse(dne_file.is_file())
 
     def test_list_files(self):
@@ -82,7 +98,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         contents = bucket.list_object_keys(key=None)
         self.assertIn(self.example1_key, contents)
         self.assertIn(self.example2_key, contents)
-        self.assertEqual(len(contents), 2)
+        self.assertEqual(len(contents), 4)
         self.assertEqual(bucket.get_bucket_region(), 'us-east-1')
 
         bucket2 = S3_Bucket(
@@ -126,19 +142,19 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         contents = bucket_folder.list_object_keys(key=None)
         self.assertNotIn(self.example1_key, contents)
         self.assertIn(self.example2_key, contents)
-        self.assertEqual(len(contents), 1)
+        self.assertEqual(len(contents), 2)
 
         # Ask for parent folder
         contents = bucket_folder.parent.list_object_keys()
         self.assertIn(self.example1_key, contents)
         self.assertIn(self.example2_key, contents)
-        self.assertEqual(len(contents), 2)
+        self.assertEqual(len(contents), 4)
 
         # Use parents to get folder
         contents = bucket_folder.parents[-1].list_object_keys()
         self.assertIn(self.example1_key, contents)
         self.assertIn(self.example2_key, contents)
-        self.assertEqual(len(contents), 2)
+        self.assertEqual(len(contents), 4)
 
         root_folder = S3_Bucket_Folder(
             bucket_name=self.bucket1_name,
@@ -151,7 +167,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         contents = folder1.list_object_keys(key=None)
         self.assertNotIn(self.example1_key, contents)
         self.assertIn(self.example2_key, contents)
-        self.assertEqual(len(contents), 1)
+        self.assertEqual(len(contents), 2)
 
     def test_true_div(self):
         bucket = S3_Bucket(
@@ -374,6 +390,64 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             bucket_file = bucket / self.example1_key
             bucket_file.download_file(local_filename=tmp_file)
             self._assert_files_equal(self.file1_path, tmp_file)
+
+    def test_download_files_folder1(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+
+        with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_path = Path(tmp)
+            download_path = tmp_path / 'sub'
+
+            bucket.download_files(
+                local_path=str(download_path),
+                key='folder1',
+            )
+            self._assert_files_equal(self.file1_path, download_path / 'file.txt')
+            self._assert_files_equal(self.file1_path, download_path / 'file2.txt')
+
+    def test_download_files_prefix(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+
+        with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_path = Path(tmp)
+            download_path = tmp_path / 'sub1'
+
+            (bucket / 'folder').download_files(
+                local_path=str(download_path),
+            )
+            self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file.txt')
+            self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file2.txt')
+            self._assert_files_equal(self.file2_path, download_path / 'folder2' / 'file3.txt')
+
+    def test_download_files_root(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+
+        with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_path = Path(tmp)
+            download_path = tmp_path / 'sub1'
+
+            bucket.download_files(
+                local_path=str(download_path),
+            )
+            self._assert_files_equal(self.file1_path, download_path / self.example1_key)
+            self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file.txt')
+            self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file2.txt')
+            self._assert_files_equal(self.file2_path, download_path / 'folder2' / 'file3.txt')
 
     def test_bucket_upload(self):
         bucket = S3_Bucket(

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from enum import auto, Enum
 import io
@@ -17,6 +18,9 @@ try:
     from boto3.s3.transfer import TransferConfig
     from botocore.exceptions import ClientError
     from botocore.response import StreamingBody
+    # Unfortunately, the NoSuchKey exception does not reliably work. ClientError is used instead
+    # s3_unconnected_client = boto3.client('s3')
+    # NoSuchKey = s3_unconnected_client.exceptions.NoSuchKey
 except ImportError:
     raise ImportError("S3_Bucket requires boto3 to be installed")
 
@@ -27,6 +31,7 @@ if TYPE_CHECKING:
     # https://youtype.github.io/boto3_stubs_docs/mypy_boto3_s3/service_resource/
     from mypy_boto3_s3.service_resource import Bucket
     from mypy_boto3_s3.service_resource import Object
+    from mypy_boto3_s3.service_resource import ObjectSummary
     from mypy_boto3_s3.service_resource import BucketObjectsCollection
     from mypy_boto3_s3.service_resource import S3ServiceResource
 
@@ -50,9 +55,6 @@ class S3_Bucket(AWS_Session):
         OVERWRITE_OLDER = auto()
         NEVER_OVERWRITE = auto()
 
-    def get_bucket(self) -> 'Bucket':
-        return self.resource.Bucket(self.bucket_name)
-
     def __str__(self):
         key = self._get_key()
         if key == '':
@@ -72,8 +74,12 @@ class S3_Bucket(AWS_Session):
         return super().client
 
     @staticmethod
-    def _boto3_error(ex: ClientError):
-        return ex.response['Error']['Code']
+    def _boto3_error(ex: ClientError) -> str:
+        return ex.response.get('Error', {}).get('Code')
+
+    def get_boto3_bucket(self) -> 'Bucket':
+        # Might raise error code NoSuchBucket
+        return self.resource.Bucket(self.bucket_name)
 
     @staticmethod
     @lru_cache(maxsize=128)
@@ -119,9 +125,40 @@ class S3_Bucket(AWS_Session):
             if self._is_blank_key(self.key):
                 key = extra_key
             else:
-                key = PurePosixPath(self.key) / extra_key
+                key = str(PurePosixPath(self.key) / extra_key)
 
         return key
+
+    class CompareResult(Enum):
+        DIFFERENT_SIZE = auto()
+        LOCAL_NEWER = auto()
+        SAME_TIMES = auto()
+        LOCAL_OLDER = auto()
+
+    @staticmethod
+    def _compare_object_to_file(
+            bucket_object: Union['Object', 'ObjectSummary'],
+            local_filename: Path,
+    ) -> CompareResult:
+        s3_last_modified = bucket_object.last_modified
+        s3_file_size = bucket_object.content_length
+
+        local_stats = local_filename.stat()
+        local_last_modified = datetime.fromtimestamp(
+            local_stats.st_mtime,
+            tz=local_timezone
+        )
+        local_file_size = local_stats.st_size
+
+        if s3_file_size != local_file_size:
+            return S3_Bucket.CompareResult.DIFFERENT_SIZE
+        else:
+            if local_last_modified > s3_last_modified:
+                return S3_Bucket.CompareResult.LOCAL_NEWER
+            elif local_last_modified == s3_last_modified:
+                return S3_Bucket.CompareResult.SAME_TIMES
+            else:
+                return S3_Bucket.CompareResult.LOCAL_OLDER
 
     def upload_file(
             self,
@@ -130,25 +167,49 @@ class S3_Bucket(AWS_Session):
             key: Optional[Union[str, PurePosixPath]] = None,
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
+            overwrite_mode: OverwriteModes = OverwriteModes.ALWAYS_OVERWRITE
     ):
-        key = self._get_key(key)
-
         if transfer_config is None:
             transfer_config = TransferConfig(multipart_threshold=5 * (1024**3))  # 5 GB
 
-        self.client.upload_file(
-            Filename=str(local_filename),
-            Bucket=self.bucket_name,
-            Key=key,
-            ExtraArgs=extra_args,
-            Config=transfer_config,
-        )
+        if overwrite_mode == S3_Bucket.OverwriteModes.ALWAYS_OVERWRITE:
+            do_upload = True
+        else:
+            try:
+                bucket_object = self.get_object(key)
+                if overwrite_mode == S3_Bucket.OverwriteModes.NEVER_OVERWRITE:
+                    do_upload = False
+                else:
+                    local_filename = Path(local_filename)
+                    compare_result = S3_Bucket._compare_object_to_file(bucket_object, local_filename)
+                    if compare_result in {
+                        S3_Bucket.CompareResult.DIFFERENT_SIZE,
+                        S3_Bucket.CompareResult.LOCAL_NEWER
+                    }:
+                        do_upload = True
+                    else:
+                        do_upload = False
+            except ClientError as ex:
+                if self._boto3_error(ex) == 'NoSuchKey':
+                    do_upload = True
+                else:
+                    raise
+
+        if do_upload:
+            key = self._get_key(key)
+            self.client.upload_file(
+                Filename=str(local_filename),
+                Bucket=self.bucket_name,
+                Key=key,
+                ExtraArgs=extra_args,
+                Config=transfer_config,
+            )
 
     def open(
-        self,
-        mode: str = 'r',
-        encoding: Optional[str] = None,
-        errors: Optional[str] = None,
+            self,
+            mode: str = 'r',
+            encoding: Optional[str] = None,
+            errors: Optional[str] = None,
     ) -> io.IOBase:
         if mode is None or len(mode) == 0:
             raise ValueError('open mode required')
@@ -181,7 +242,10 @@ class S3_Bucket(AWS_Session):
         with self.open('rb', encoding=encoding, errors=errors) as f:
             return f.read()
 
-    def copy_to(self, target: Union[str, 'S3_Bucket_Key']):
+    def copy_to(
+            self,
+            target: Union[str, 'S3_Bucket_Key']
+    ):
         if isinstance(target, str):
             target = self._build_s3_bucket_key(target)
         self_key = self._get_key()
@@ -206,49 +270,118 @@ class S3_Bucket(AWS_Session):
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
             create_parents: bool = True,
-            overwrite_mode: OverwriteModes = OverwriteModes.OVERWRITE_OLDER
+            overwrite_mode: OverwriteModes = OverwriteModes.OVERWRITE_OLDER,
+            _bucket_object_summary: 'ObjectSummary' = None,
     ):
-        if create_parents:
+        if self._non_blank_key(key):
+            file_obj = self / key
+            file_obj.download_file(
+                local_filename=local_filename,
+                extra_args=extra_args,
+                transfer_config=transfer_config,
+                create_parents=create_parents,
+                overwrite_mode=overwrite_mode,
+                _bucket_object_summary=_bucket_object_summary,
+            )
+        else:
+            log = logging.getLogger(f"{__name__}.download_file")
             local_path = Path(local_filename)
-            local_path.parent.mkdir(parents=True, exist_ok=True)
+            if create_parents:
+                local_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if overwrite_mode in {S3_Bucket.OverwriteModes.OVERWRITE_OLDER, S3_Bucket.OverwriteModes.NEVER_OVERWRITE}:
-            local_filename = Path(local_filename)
-            if local_filename.exists():
-                if overwrite_mode == S3_Bucket.OverwriteModes.NEVER_OVERWRITE:
-                    do_download = False
-                else:  # Check ages and size
-                    bucket_object = self.get_object(key)
-                    s3_last_modified = bucket_object.last_modified
-                    s3_file_size = bucket_object.content_length
-
-                    local_stats = local_filename.stat()
-                    local_last_modified = datetime.fromtimestamp(
-                        local_stats.st_mtime,
-                        tz=local_timezone
-                    )
-                    local_file_size = local_stats.st_size
-
-                    if s3_file_size == local_file_size:
-                        if local_last_modified > s3_last_modified:
-                            do_download = False
+            if overwrite_mode in {S3_Bucket.OverwriteModes.OVERWRITE_OLDER, S3_Bucket.OverwriteModes.NEVER_OVERWRITE}:
+                if local_path.exists():
+                    if overwrite_mode == S3_Bucket.OverwriteModes.NEVER_OVERWRITE:
+                        do_download = False
+                        log.info(f"{self} download to {local_path} skipped since file exists and mode = {overwrite_mode}")
+                    else:  # Check ages and size
+                        if _bucket_object_summary is None:
+                            bucket_object = self.get_object()
                         else:
+                            bucket_object = _bucket_object_summary
+
+                        compare_result = S3_Bucket._compare_object_to_file(bucket_object, local_path)
+
+                        if compare_result in {
+                            S3_Bucket.CompareResult.DIFFERENT_SIZE,
+                            S3_Bucket.CompareResult.LOCAL_OLDER
+                        }:
                             do_download = True
-                    else:
-                        do_download = True
+                            log.info(
+                                f"{self} download to {local_path} downloaded since file exists but {compare_result} "
+                                f"and mode = {overwrite_mode}"
+                            )
+                        else:
+                            do_download = False
+                            log.info(
+                                f"{self} download to {local_path} skipped since file exists {compare_result} "
+                                f"and mode = {overwrite_mode}"
+                            )
+                else:
+                    do_download = True
+                    log.info(
+                        f"{self} download to {local_path} downloaded since local file not not exist"
+                    )
             else:
                 do_download = True
-        else:
-            do_download = True
+                log.info(
+                    f"{self} download to {local_path} downloaded since mode = {overwrite_mode}"
+                )
 
-        if do_download:
-            key = self._get_key(key)
-            self.resource.Bucket(self.bucket_name).download_file(
-                Key=key,
-                Filename=str(local_filename),
-                ExtraArgs=extra_args,
-                Config=transfer_config,
+            if do_download:
+                key = self._get_key()
+                self.resource.Bucket(self.bucket_name).download_file(
+                    Key=key,
+                    Filename=str(local_path),
+                    ExtraArgs=extra_args,
+                    Config=transfer_config,
+                )
+
+    def download_files(
+            self,
+            *,
+            local_path: Union[str, Path],
+            key: Optional[Union[str, PurePosixPath]] = None,
+            extra_args: Optional[dict] = None,
+            transfer_config: Optional[TransferConfig] = None,
+            create_parents: bool = True,
+            overwrite_mode: OverwriteModes = OverwriteModes.OVERWRITE_OLDER,
+    ) -> Iterable[Path]:
+        if self._non_blank_key(key):
+            file_obj = self / key
+            file_obj.download_files(
+                local_path=local_path,
+                extra_args=extra_args,
+                transfer_config=transfer_config,
+                create_parents=create_parents,
+                overwrite_mode=overwrite_mode,
             )
+        else:
+            local_path = Path(local_path)
+            if create_parents:
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+
+            results = list()
+            full_key = self._get_key()
+            base_path = PurePosixPath(full_key)
+            for s3_object in self.list_objects():
+                s3_object_path = PurePosixPath(s3_object.key)
+                try:
+                    relative_key = s3_object_path.relative_to(base_path)
+                except ValueError:
+                    relative_key = s3_object_path.relative_to(base_path.parent)
+                local_filename = local_path / relative_key
+                s3_file = self._build_s3_bucket_key(s3_object.key)
+                results.append(local_filename)
+                s3_file.download_file(
+                    local_filename=str(local_filename),
+                    create_parents=create_parents,
+                    extra_args=extra_args,
+                    transfer_config=transfer_config,
+                    overwrite_mode=overwrite_mode,
+                    _bucket_object_summary=s3_object,
+                )
+            return results
 
     def exists(self, key: Optional[Union[str, PurePosixPath]] = None) -> bool:
         key = self._get_key(key)
@@ -275,9 +408,9 @@ class S3_Bucket(AWS_Session):
         return self.get_object_uncached(key)
 
     def delete(
-        self,
-        key: Optional[Union[str, PurePosixPath]] = None,
-        version_id: str = None,
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str = None,
     ):
         key = self._get_key(key)
         kwargs = {
@@ -300,9 +433,9 @@ class S3_Bucket(AWS_Session):
 
     @deprecated('The `delete_by_key` method is deprecated; use `delete` instead.', category=DeprecationWarning)
     def delete_by_key(
-        self,
-        key: Union[str, PurePosixPath],
-        version_id: str = None,
+            self,
+            key: Union[str, PurePosixPath],
+            version_id: str = None,
     ):
         self.delete(key, version_id=version_id)
 
@@ -390,19 +523,6 @@ class S3_Bucket(AWS_Session):
         val = s3_obj.get()['ContentType']
         return val
 
-    def is_dir(self):
-        try:
-            return self.content_type() == 'application/x-directory'
-        except ClientError as ex:
-            if self._boto3_error(ex) == 'NoSuchKey':
-                # noinspection PyUnresolvedReferences
-                contents_list = list(self.list_objects().limit(5))
-                if len(contents_list) == 0:
-                    return False
-                else:
-                    return True
-            raise
-
     def is_file(self):
         try:
             return self.content_type() != 'application/x-directory'
@@ -410,6 +530,10 @@ class S3_Bucket(AWS_Session):
             if self._boto3_error(ex) == 'NoSuchKey':
                 return False
             raise
+
+    # Note: There is no really useful & consistent way to implement id_dir on S3
+    # A good investigation related to this is here:
+    # https://www.tecracer.com/blog/2023/01/what-are-the-folders-in-the-s3-console.html
 
     def __truediv__(
             self, other: Union[str, Path]
