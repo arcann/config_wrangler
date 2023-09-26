@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from typing import TypeVar, Generic, List, Any, Callable
+from typing import TypeVar, List, Any, Callable
 
 from pydantic import field_validator
-from pydantic.fields import FieldInfo
+from pydantic.fields import AliasPath, AliasChoices
+from pydantic_core import PydanticUndefined
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.delimited_field import DelimitedListFieldInfo
 from config_wrangler.validate_config_hierarchy import config_hierarchy_validator
-from pydantic.fields import FieldInfo, AliasPath, AliasChoices
-from pydantic_core import PydanticUndefined
 
 RefConfigHierarchy = TypeVar('RefConfigHierarchy', bound=ConfigHierarchy)
 

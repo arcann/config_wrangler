@@ -13,26 +13,28 @@ python = ">=3.9, <4.0.0"
 pydantic = ">=2.2"
 StrEnum = "^0.4.7"
 SQLAlchemy = {version = ">=1.4", optional = true}
-# Keep boto3 fairly current to avoid scanning a huge list of versions
 boto3 = {version = ">=1.26", optional = true}
 cachetools = {version = ">=5.3.1", optional = true}
 pykeepass = {version = ">=4.0.0", optional = true}
 auto-all = "^1.4.1"
 pydicti = "^1.1.6"
 typing-extensions = ">=4.5.0"
+boto3-stubs = {extras = ["secretsmanager"], version = "^1.28.54"}
 
 [tool.poetry.extras]
 sqlalchemy = ["SQLAlchemy"]
 pykeepass = ["pykeepass"]
 redshift = ["boto3"]
 s3 = ["boto3", "cachetools"]
+aws = ["boto3", "cachetools"]
 
 [tool.poetry.group.dev.dependencies]
 tox = "^4.6"
 moto = ">=3.1.9"
 # Optional but required for tests so needed for development
+# Keep boto3 fairly current to avoid scanning a huge list of versions
 boto3 = ">=1.23.4"
-boto3-stubs = {version=">=1.23.4", extras=["s3", "dynamodb", "redshift"]}
+boto3-stubs = {version=">=1.23.4", extras=["s3", "dynamodb", "redshift", "ssm"]}
 keyring = "^23.9.3"
 pykeepass = ">4.0.0"
 SQLAlchemy = ">=1.4"

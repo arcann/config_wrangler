@@ -18,9 +18,15 @@ try:
     from boto3.s3.transfer import TransferConfig
     from botocore.exceptions import ClientError
     from botocore.response import StreamingBody
-    # Unfortunately, the NoSuchKey exception does not reliably work. ClientError is used instead
+
+    # Unfortunately, the NoSuchKey exception below does not reliably work. ClientError is used instead
     # s3_unconnected_client = boto3.client('s3')
     # NoSuchKey = s3_unconnected_client.exceptions.NoSuchKey
+
+    ERROR_S3_NOT_FOUND = {'404', 'NoSuchKey'}
+
+    # Also note the following list of error codes:
+    # https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList
 except ImportError:
     raise ImportError("S3_Bucket requires boto3 to be installed")
 
@@ -76,6 +82,10 @@ class S3_Bucket(AWS_Session):
     @staticmethod
     def _boto3_error(ex: ClientError) -> str:
         return ex.response.get('Error', {}).get('Code')
+
+    @staticmethod
+    def _boto3_error_match(ex: ClientError, error_set: Set[str]) -> bool:
+        return S3_Bucket._boto3_error(ex) in error_set
 
     def get_boto3_bucket(self) -> 'Bucket':
         # Might raise error code NoSuchBucket
@@ -190,7 +200,7 @@ class S3_Bucket(AWS_Session):
                     else:
                         do_upload = False
             except ClientError as ex:
-                if self._boto3_error(ex) == 'NoSuchKey':
+                if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
                     do_upload = True
                 else:
                     raise
@@ -390,7 +400,7 @@ class S3_Bucket(AWS_Session):
             self.client.head_object(Bucket=self.bucket_name, Key=str(key))
             return True
         except ClientError as ex:
-            if self._boto3_error(ex) == 'NoSuchKey':
+            if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
                 return False
             else:
                 raise
@@ -425,7 +435,7 @@ class S3_Bucket(AWS_Session):
         try:
             self.delete()
         except ClientError as ex:
-            if self._boto3_error(ex) == 'NoSuchKey':
+            if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
                 if not missing_ok:
                     raise
             else:
@@ -527,7 +537,7 @@ class S3_Bucket(AWS_Session):
         try:
             return self.content_type() != 'application/x-directory'
         except ClientError as ex:
-            if self._boto3_error(ex) == 'NoSuchKey':
+            if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
                 return False
             raise
 

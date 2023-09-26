@@ -103,3 +103,15 @@ class AWS_Session(Credentials):
     def nav_to_s3_link(self, s3_uri: str) -> 'S3_Bucket_Key':
         bucket, key = self.split_s3_uri(s3_uri)
         return self.nav_to_bucket(bucket) / key
+
+    def get_ssm(self):
+        from config_wrangler.config_templates.aws.ssm import SSM
+        return self._factory(
+            SSM,
+        )
+
+    def get_secrets_manager(self):
+        from config_wrangler.config_templates.aws.secrets_manager import SecretsManager
+        return self._factory(
+            SecretsManager,
+        )
