@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 class SecretsManager(AWS_Session):
     _service: str = PrivateAttr(default='secretsmanager')
+    # Region is not optional for SecretsManager
+    region_name: str
 
     @property
     def client(self) -> 'SecretsManagerClient':
@@ -21,10 +23,18 @@ class SecretsManager(AWS_Session):
         return self.client.get_secret_value(SecretId=secret_id)
 
     def get_secret_value_by_id(self, secret_id: str) -> str:
-        return self.get_secret_value_response(secret_id=secret_id)['SecretString']
+        response = self.get_secret_value_response(secret_id=secret_id)
+        try:
+            return response['SecretString']
+        except KeyError:
+            raise ValueError(f"{secret_id} did not have SecretString. Maybe it's binary?")
 
     def get_secret_value_bytes_by_id(self, secret_id: str) -> bytes:
-        return self.get_secret_value_response(secret_id=secret_id)['SecretBinary']
+        response = self.get_secret_value_response(secret_id=secret_id)
+        try:
+            return response['SecretBinary']
+        except KeyError:
+            raise ValueError(f"{secret_id} did not have SecretBinary. Maybe it's string?")
 
 
 class SecretValue(SecretsManager):

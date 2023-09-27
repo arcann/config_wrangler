@@ -3,8 +3,9 @@ from pathlib import Path
 
 
 class Base_Tests_Mixin:
-    def get_package_path(self) -> Path:
-        module_path = inspect.getfile(self.__class__)
+    @staticmethod
+    def get_package_path() -> Path:
+        module_path = inspect.getfile(Base_Tests_Mixin)
         return Path(module_path).parent
 
     def get_test_files_path(self):

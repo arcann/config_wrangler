@@ -16,35 +16,75 @@ if TYPE_CHECKING:
 
 class SSM(AWS_Session):
     _service: str = PrivateAttr(default='ssm')
+    # Region is not optional for SSM
+    region_name: str
 
     @property
     def client(self) -> 'SSMClient':
         return super().client
 
-    def get_parameters_response(self, names: List[str]) -> 'GetParametersResultTypeDef':
-        return self.client.get_parameters(Names=names)
+    def get_parameters_response(
+            self,
+            names: List[str],
+            with_decryption: bool = True,
+    ) -> 'GetParametersResultTypeDef':
+        return self.client.get_parameters(
+            Names=names,
+            WithDecryption=with_decryption,
+        )
 
-    def get_parameters(self, names: List[str]) -> dict:
-        return {entry['Name']: entry['Value'] for entry in self.get_parameters_response(names)['Parameters']}
+    def get_parameters(
+            self,
+            names: List[str],
+            with_decryption: bool = True,
+    ) -> dict:
+        response = self.get_parameters_response(names=names, with_decryption=with_decryption)
+        return {entry['Name']: entry['Value'] for entry in response['Parameters']}
 
     def get_parameters_by_path_response(
             self,
             path: str,
             recursive: bool = True,
+            with_decryption: bool = True,
     ) -> 'GetParametersByPathResultTypeDef':
         return self.client.get_parameters_by_path(
             Path=path,
             Recursive=recursive,
+            WithDecryption=with_decryption,
         )
 
-    def get_parameters_by_path(self, names: List[str]) -> dict:
-        return {entry['Name']: entry['Value'] for entry in self.get_parameters_response(names)['Parameters']}
+    def get_parameters_by_path(
+            self,
+            path: str,
+            recursive: bool = True,
+            with_decryption: bool = True,
+    ) -> dict:
+        response = self.get_parameters_by_path_response(
+            path=path,
+            recursive=recursive,
+            with_decryption=with_decryption,
+        )
+        return {
+            entry['Name']: entry['Value']
+            for entry in response['Parameters']
+        }
 
-    def get_parameter_response(self, name: str) -> 'GetParameterResultTypeDef':
-        return self.client.get_parameter(Name=name)
+    def get_parameter_response(
+            self,
+            name: str,
+            with_decryption: bool = True,
+    ) -> 'GetParameterResultTypeDef':
+        return self.client.get_parameter(
+            Name=name,
+            WithDecryption=with_decryption,
+        )
 
-    def get_parameter_value(self, name: str):
-        ssm_response = self.get_parameter_response(name)
+    def get_parameter_value(
+            self,
+            name: str,
+            with_decryption: bool = True,
+    ) -> str:
+        ssm_response = self.get_parameter_response(name, with_decryption)
         return ssm_response['Parameter']['Value']
 
 
