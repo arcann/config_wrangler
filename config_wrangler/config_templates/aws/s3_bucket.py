@@ -1,17 +1,18 @@
+import io
 import logging
+import warnings
 from datetime import datetime, timezone
 from enum import auto, Enum
-import io
 from functools import lru_cache
 from pathlib import PurePosixPath, Path
 from typing import *
 
 from cachetools import cached, TTLCache
 from pydantic import field_validator, PrivateAttr
-# noinspection PyProtectedMember
-from typing_extensions import deprecated
 
 from config_wrangler.config_templates.aws.aws_session import AWS_Session
+
+# noinspection PyProtectedMember
 
 try:
     import boto3
@@ -405,8 +406,12 @@ class S3_Bucket(AWS_Session):
             else:
                 raise
 
-    @deprecated('The `key_exists` method is deprecated; use `exists` instead.', category=DeprecationWarning)
     def key_exists(self, key: Union[str, PurePosixPath]) -> bool:
+        warnings.warn(
+            'The `key_exists` method is deprecated; use `exists` instead.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.exists(key)
 
     def get_object_uncached(self, key: Optional[Union[str, PurePosixPath]] = None) -> 'Object':
@@ -441,18 +446,30 @@ class S3_Bucket(AWS_Session):
             else:
                 raise
 
-    @deprecated('The `delete_by_key` method is deprecated; use `delete` instead.', category=DeprecationWarning)
     def delete_by_key(
             self,
             key: Union[str, PurePosixPath],
             version_id: str = None,
     ):
+        warnings.warn(
+            'The `delete_by_key` method is deprecated; use `delete` instead.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.delete(key, version_id=version_id)
 
     def list_objects(self, key: Optional[Union[str, PurePosixPath]] = None, ) -> 'BucketObjectsCollection':
         key = self._get_key(key)
         collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=key)
         return collection
+
+    def find_objects(self, key: Union[str, PurePosixPath] = None) -> 'BucketObjectsCollection':
+        warnings.warn(
+            'The `find_objects` method is deprecated; use `list_objects` instead.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.list_objects(key=key)
 
     def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
         obj_collection = self.list_objects(key)
@@ -610,13 +627,17 @@ class S3_Bucket_Key(S3_Bucket):
             raise ValueError(f"Zero length string not a valid key")
         return v
 
-    @deprecated("The `upload_folder_file` method is deprecated; use `my_bucket_key.upload_file() instead", category=DeprecationWarning)
     def upload_specified_file(
             self,
             local_filename: Union[str, PurePosixPath],
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
     ):
+        warnings.warn(
+            "The `upload_folder_file` method is deprecated; use `my_bucket_key.upload_file() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().upload_file(
             local_filename=local_filename,
             key=self.key,
@@ -624,7 +645,6 @@ class S3_Bucket_Key(S3_Bucket):
             transfer_config=transfer_config,
         )
 
-    @deprecated("The `upload_folder_file` method is deprecated; use `my_bucket_key.download_file() instead", category=DeprecationWarning)
     def download_specified_file(
             self,
             local_filename: Union[str, PurePosixPath],
@@ -632,6 +652,11 @@ class S3_Bucket_Key(S3_Bucket):
             transfer_config: Optional[TransferConfig] = None,
             create_parents: bool = True,
     ):
+        warnings.warn(
+            "The `upload_folder_file` method is deprecated; use `my_bucket_key.download_file() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().download_file(
             local_filename=local_filename,
             key=self.key,
@@ -666,7 +691,6 @@ class S3_Bucket_Folder(S3_Bucket):
         else:
             return self.folder
 
-    @deprecated("The `upload_folder_file` method is deprecated; use `(my_folder / key_suffix).download_file() instead", category=DeprecationWarning)
     def upload_folder_file(
             self,
             local_filename: Union[str, Path],
@@ -677,6 +701,12 @@ class S3_Bucket_Folder(S3_Bucket):
         """
         Differs from upload_file in that it requires a key_suffix to add after the folder name
         """
+        warnings.warn(
+            "The `upload_folder_file` method is deprecated; use `(my_folder / key_suffix).download_file() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         full_key = PurePosixPath(self.folder, key_suffix)
         super().upload_file(
             local_filename=local_filename,
@@ -685,7 +715,6 @@ class S3_Bucket_Folder(S3_Bucket):
             transfer_config=transfer_config,
         )
 
-    @deprecated("The `download_folder_file` method is deprecated; use `(my_folder / key_suffix).upload_file() instead", category=DeprecationWarning)
     def download_folder_file(
             self,
             key_suffix: Union[str, PurePosixPath],
@@ -697,6 +726,12 @@ class S3_Bucket_Folder(S3_Bucket):
         """
         Differs from download_file in that it requires a key_suffix to add after the folder name
         """
+        warnings.warn(
+            "The `download_folder_file` method is deprecated; use `(my_folder / key_suffix).upload_file() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         full_key = PurePosixPath(self.folder, key_suffix)
         super().download_file(
             key=full_key,
@@ -733,13 +768,18 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
         else:
             return str(PurePosixPath(self.folder) / self.file_name)
 
-    @deprecated("The `upload_folder_file` method is deprecated; use `my_folder_file.upload_file() instead", category=DeprecationWarning)
     def upload_specified_file(
         self,
         local_filename: Union[str, PurePosixPath],
         extra_args: Optional[dict] = None,
         transfer_config: Optional[TransferConfig] = None,
     ):
+        warnings.warn(
+            "The `upload_folder_file` method is deprecated; use `my_folder_file.upload_file() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         super().upload_folder_file(
             local_filename=local_filename,
             key_suffix=self.file_name,
@@ -747,13 +787,18 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
             transfer_config=transfer_config,
         )
 
-    @deprecated("The `upload_folder_file` method is deprecated; use `my_folder_file.download_file() instead", category=DeprecationWarning)
     def download_specified_file(
         self,
         local_filename: Union[str, PurePosixPath],
         extra_args: Optional[dict] = None,
         transfer_config: Optional[TransferConfig] = None,
     ):
+        warnings.warn(
+            "The `upload_folder_file` method is deprecated; use `my_folder_file.download_file() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         super().download_folder_file(
             local_filename=local_filename,
             key_suffix=self.file_name,

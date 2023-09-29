@@ -120,6 +120,17 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         )
         self.assertEqual(bucket3.get_bucket_region(), self.bucket3_region)
 
+    def test_deprecated_find_objects(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        contents = bucket.find_objects(key=None)
+        contents_keys = [obj.key for obj in contents]
+        self.assertIn(self.example1_key, contents_keys)
+
     def test_iter_files(self):
         bucket = S3_Bucket(
             bucket_name=self.bucket1_name,

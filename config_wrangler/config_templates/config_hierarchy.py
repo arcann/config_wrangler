@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import warnings
 from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Set, Generator, Tuple, Literal
 
 from pydantic import PrivateAttr, BaseModel, ValidationError
-# noinspection PyProtectedMember
-from typing_extensions import deprecated
 
 from config_wrangler.config_wrangler_config import ConfigWranglerConfig
+
+# noinspection PyProtectedMember
 
 if TYPE_CHECKING:
     from config_wrangler.config_from_loaders import ConfigFromLoaders
@@ -187,10 +188,13 @@ class ConfigHierarchy(BaseModel):
         child_object._parents = self._parents + [name]
         child_object._root_config = self._root_config
 
-    @deprecated(
-        'The `set_as_child` method is deprecated; use `add_child` instead.', category=DeprecationWarning
-    )
     def set_as_child(self, name: str, other_config_item: 'ConfigHierarchy'):
+        warnings.warn(
+            'The `set_as_child` method is deprecated; use `add_child` instead.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         self.add_child(name, other_config_item)
 
     def get_copy(self, copied_by: str = 'get_copy') -> 'ConfigHierarchy':
