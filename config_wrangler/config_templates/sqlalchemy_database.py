@@ -39,6 +39,8 @@ class SQLAlchemyDatabase(Credentials):
     rs_new_credentials_seconds: int = 1800
     rs_region_name: Optional[str] = None
     rs_cluster_id: Optional[str] = None
+    rs_auto_create: Optional[bool] = None
+    rs_db_groups: Optional[List[str]] = None
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
     rs_db_user_id: Optional[str] = None
@@ -143,11 +145,21 @@ class SQLAlchemyDatabase(Credentials):
                 aws_secret_access_key=self.aws_secret_access_key,
                 aws_session_token=None,
             )
+
+        # Send optional params to get_cluster_credentials only if they have real values
+        extra_get_cluster_credentials_args = dict()
+        if self.rs_auto_create is not None:
+            extra_get_cluster_credentials_args['AutoCreate'] = self.rs_auto_create
+
+        if self.rs_db_groups is not None:
+            extra_get_cluster_credentials_args['DbGroups'] = self.rs_db_groups
+
         new_credentials = self._rs_client.get_cluster_credentials(
                 DbUser=self.rs_db_user_id,
                 DbName=self.database_name,
                 DurationSeconds=self.rs_duration_seconds,
-                ClusterIdentifier=self.rs_cluster_id
+                ClusterIdentifier=self.rs_cluster_id,
+                **extra_get_cluster_credentials_args
             )
         rs_new_credentials_timedelta = timedelta(seconds=self.rs_new_credentials_seconds)
         self._rs_credential_expiry = self._now() + rs_new_credentials_timedelta
