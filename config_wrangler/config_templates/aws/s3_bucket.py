@@ -640,7 +640,6 @@ class S3_Bucket_Key(S3_Bucket):
         )
         super().upload_file(
             local_filename=local_filename,
-            key=self.key,
             extra_args=extra_args,
             transfer_config=transfer_config,
         )
@@ -653,13 +652,12 @@ class S3_Bucket_Key(S3_Bucket):
             create_parents: bool = True,
     ):
         warnings.warn(
-            "The `upload_folder_file` method is deprecated; use `my_bucket_key.download_file() instead",
+            "The `download_specified_file` method is deprecated; use `my_bucket_key.download_file() instead",
             DeprecationWarning,
             stacklevel=2,
         )
         super().download_file(
             local_filename=local_filename,
-            key=self.key,
             extra_args=extra_args,
             transfer_config=transfer_config,
             create_parents=create_parents,
@@ -780,9 +778,8 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
             stacklevel=2,
         )
 
-        super().upload_folder_file(
+        super().upload_file(
             local_filename=local_filename,
-            key_suffix=self.file_name,
             extra_args=extra_args,
             transfer_config=transfer_config,
         )
@@ -794,14 +791,13 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
         transfer_config: Optional[TransferConfig] = None,
     ):
         warnings.warn(
-            "The `upload_folder_file` method is deprecated; use `my_folder_file.download_file() instead",
+            "The `download_specified_file` method is deprecated; use `my_folder_file.download_file() instead",
             DeprecationWarning,
             stacklevel=2,
         )
 
-        super().download_folder_file(
+        super().download_file(
             local_filename=local_filename,
-            key_suffix=self.file_name,
             extra_args=extra_args,
             transfer_config=transfer_config,
         )
