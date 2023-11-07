@@ -24,7 +24,7 @@ typing-extensions = ">=4.7.1"
 sqlalchemy = ["SQLAlchemy"]
 pykeepass = ["pykeepass"]
 redshift = ["boto3"]
-s3 = ["boto3", "cachetools"]1
+s3 = ["boto3", "cachetools"]
 aws = ["boto3", "cachetools"]
 
 [tool.poetry.group.dev.dependencies]
