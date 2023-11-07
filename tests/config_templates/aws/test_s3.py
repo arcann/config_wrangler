@@ -6,6 +6,8 @@ from tempfile import TemporaryDirectory
 
 import boto3
 import moto
+from botocore.exceptions import ClientError
+from moto.core import set_initial_no_auth_action_count
 
 from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Folder
 from config_wrangler.config_templates.credentials import PasswordSource
@@ -479,3 +481,36 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
 
             contents = bucket.list_object_keys()
             self.assertIn(key, contents)
+
+    def test_download_404_error(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        with self.assertRaises(ClientError) as raises_ex:
+            bucket.download_file(key='this/file/does_not_exist', local_filename='test')
+
+        print(raises_ex.exception.response)
+        self.assertEqual(raises_ex.exception.response['Error']['Code'], "404")
+
+    @set_initial_no_auth_action_count(0)
+    def test_download_auth_error(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        with self.assertRaises(ClientError) as raises_ex:
+            with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+                tmp_path = Path(tmp)
+                tmp_file = tmp_path / 'path1'
+
+                bucket.download_file(
+                    local_filename=tmp_file,
+                    key=str(self.example1_key),
+                )
+        print(raises_ex.exception.response)
+        self.assertEqual(raises_ex.exception.response['Error']['Code'], "InvalidAccessKeyId")

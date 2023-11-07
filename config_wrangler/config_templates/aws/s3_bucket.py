@@ -10,6 +10,7 @@ from typing import *
 from cachetools import cached, TTLCache
 from pydantic import field_validator, PrivateAttr
 
+from config_wrangler.config_exception import ConfigError
 from config_wrangler.config_templates.aws.aws_session import AWS_Session
 
 # noinspection PyProtectedMember
@@ -48,6 +49,22 @@ if TYPE_CHECKING:
 #       (Help > Edit Custom Properties), then restart.
 
 local_timezone = datetime.now(timezone.utc).astimezone().tzinfo
+
+
+class S3ClientError(ClientError):
+    def __init__(self, message: str, original_error: Optional[ClientError]):
+        Exception.__init__(self, message)
+        if original_error is not None:
+            self.response = original_error.response
+            self.operation_name = original_error.operation_name
+        else:
+            self.response = {
+                'Error': {
+                    'Code': 'Unknown',
+                    'Message': message,
+                }
+            }
+            self.operation_name = 'Unknown'
 
 
 # noinspection PyPep8Naming
@@ -300,53 +317,67 @@ class S3_Bucket(AWS_Session):
             if create_parents:
                 local_path.parent.mkdir(parents=True, exist_ok=True)
 
-            if overwrite_mode in {S3_Bucket.OverwriteModes.OVERWRITE_OLDER, S3_Bucket.OverwriteModes.NEVER_OVERWRITE}:
-                if local_path.exists():
-                    if overwrite_mode == S3_Bucket.OverwriteModes.NEVER_OVERWRITE:
-                        do_download = False
-                        log.info(f"{self} download to {local_path} skipped since file exists and mode = {overwrite_mode}")
-                    else:  # Check ages and size
-                        if _bucket_object_summary is None:
-                            bucket_object = self.get_object()
-                        else:
-                            bucket_object = _bucket_object_summary
-
-                        compare_result = S3_Bucket._compare_object_to_file(bucket_object, local_path)
-
-                        if compare_result in {
-                            S3_Bucket.CompareResult.DIFFERENT_SIZE,
-                            S3_Bucket.CompareResult.LOCAL_OLDER
-                        }:
-                            do_download = True
-                            log.info(
-                                f"{self} download to {local_path} downloaded since file exists but {compare_result} "
-                                f"and mode = {overwrite_mode}"
-                            )
-                        else:
+            try:
+                if overwrite_mode in {S3_Bucket.OverwriteModes.OVERWRITE_OLDER, S3_Bucket.OverwriteModes.NEVER_OVERWRITE}:
+                    if local_path.exists():
+                        if overwrite_mode == S3_Bucket.OverwriteModes.NEVER_OVERWRITE:
                             do_download = False
-                            log.info(
-                                f"{self} download to {local_path} skipped since file exists {compare_result} "
-                                f"and mode = {overwrite_mode}"
-                            )
+                            log.info(f"{self} download to {local_path} skipped since file exists and mode = {overwrite_mode}")
+                        else:  # Check ages and size
+                            if _bucket_object_summary is None:
+                                bucket_object = self.get_object()
+                            else:
+                                bucket_object = _bucket_object_summary
+
+                            compare_result = S3_Bucket._compare_object_to_file(bucket_object, local_path)
+
+                            if compare_result in {
+                                S3_Bucket.CompareResult.DIFFERENT_SIZE,
+                                S3_Bucket.CompareResult.LOCAL_OLDER
+                            }:
+                                do_download = True
+                                log.info(
+                                    f"{self} download to {local_path} downloaded since file exists but {compare_result} "
+                                    f"and mode = {overwrite_mode}"
+                                )
+                            else:
+                                do_download = False
+                                log.info(
+                                    f"{self} download to {local_path} skipped since file exists {compare_result} "
+                                    f"and mode = {overwrite_mode}"
+                                )
+                    else:
+                        do_download = True
+                        log.info(
+                            f"{self} download to {local_path} downloaded since local file not not exist"
+                        )
                 else:
                     do_download = True
                     log.info(
-                        f"{self} download to {local_path} downloaded since local file not not exist"
+                        f"{self} download to {local_path} downloaded since mode = {overwrite_mode}"
                     )
-            else:
-                do_download = True
-                log.info(
-                    f"{self} download to {local_path} downloaded since mode = {overwrite_mode}"
-                )
+            except ClientError as ex:
+                if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
+                    raise S3ClientError(f"{self} does not exist", ex)
+                else:
+                    raise S3ClientError(f"{self} with ID {self.user_id} get info yielded error {ex}", ex)
+            except Exception as ex2:
+                raise S3ClientError(f"{self} get info yielded error {ex2} {repr(ex2)}", None)
 
             if do_download:
                 key = self._get_key()
-                self.resource.Bucket(self.bucket_name).download_file(
-                    Key=key,
-                    Filename=str(local_path),
-                    ExtraArgs=extra_args,
-                    Config=transfer_config,
-                )
+                try:
+                    self.resource.Bucket(self.bucket_name).download_file(
+                        Key=key,
+                        Filename=str(local_path),
+                        ExtraArgs=extra_args,
+                        Config=transfer_config,
+                    )
+                except ClientError as ex:
+                    if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
+                        raise S3ClientError(f"{self} does not exist", ex)
+                    else:
+                        raise S3ClientError(f"{self} with ID {self.user_id} download yielded error {ex}", ex)
 
     def download_files(
             self,
@@ -460,7 +491,13 @@ class S3_Bucket(AWS_Session):
 
     def list_objects(self, key: Optional[Union[str, PurePosixPath]] = None, ) -> 'BucketObjectsCollection':
         key = self._get_key(key)
-        collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=key)
+        try:
+            collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=key)
+        except ClientError as ex:
+            if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
+                raise S3ClientError(f"{self} with key={key} does not exist", ex)
+            else:
+                raise S3ClientError(f"{self} with key={key} list_objects yielded error {ex}", ex)
         return collection
 
     def find_objects(self, key: Union[str, PurePosixPath] = None) -> 'BucketObjectsCollection':
@@ -624,7 +661,7 @@ class S3_Bucket_Key(S3_Bucket):
         if not isinstance(v, str):
             v = str(v)
         if len(v) == 0:
-            raise ValueError(f"Zero length string not a valid key")
+            raise ConfigError(f"Zero length string not a valid key")
         return v
 
     def upload_specified_file(
@@ -757,7 +794,7 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
         if not isinstance(v, str):
             v = str(v)
         if len(v) == 0:
-            raise ValueError(f"Zero length string not a valid file_name")
+            raise ConfigError(f"Zero length string not a valid file_name")
         return v
 
     def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:

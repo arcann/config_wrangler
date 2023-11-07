@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "config_wrangler"
-version = "1.0.9"
+version = "1.0.11"
 license = "MIT"
 authors = ["Derek Wood"]
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
@@ -24,7 +24,7 @@ typing-extensions = ">=4.7.1"
 sqlalchemy = ["SQLAlchemy"]
 pykeepass = ["pykeepass"]
 redshift = ["boto3"]
-s3 = ["boto3", "cachetools"]
+s3 = ["boto3", "cachetools"]1
 aws = ["boto3", "cachetools"]
 
 [tool.poetry.group.dev.dependencies]
