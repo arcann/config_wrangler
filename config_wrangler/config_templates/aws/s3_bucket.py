@@ -508,12 +508,12 @@ class S3_Bucket(AWS_Session):
         )
         return self.list_objects(key=key)
 
-    def list_object_keys(self, key: Union[str, PurePosixPath] = None) -> List[str]:
+    def list_object_keys(self, key: Optional[Union[str, PurePosixPath]] = None) -> List[str]:
         obj_collection = self.list_objects(key)
         return [obj.key for obj in obj_collection]
 
-    def list_object_paths(self, key: Union[str, PurePosixPath]) -> List[PurePosixPath]:
-        return [PurePosixPath(key) for key in self.list_object_keys(key)]
+    def list_object_paths(self, key: Optional[Union[str, PurePosixPath]] = None) -> List[PurePosixPath]:
+        return [PurePosixPath(obj_key) for obj_key in self.list_object_keys(key)]
 
     # noinspection SpellCheckingInspection
     def iterdir(self) -> Iterable['S3_Bucket_Key']:
