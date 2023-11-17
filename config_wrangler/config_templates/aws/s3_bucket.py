@@ -4,7 +4,7 @@ import warnings
 from datetime import datetime, timezone
 from enum import auto, Enum
 from functools import lru_cache
-from pathlib import PurePosixPath, Path
+from pathlib import PurePosixPath, Path, PurePath
 from typing import *
 
 from cachetools import cached, TTLCache
@@ -513,11 +513,12 @@ class S3_Bucket(AWS_Session):
         return [obj.key for obj in obj_collection]
 
     def list_object_paths(self, key: Optional[Union[str, PurePosixPath]] = None) -> List[PurePosixPath]:
-        return [PurePosixPath(obj_key) for obj_key in self.list_object_keys(key)]
+        resolved_key = self._get_key(key)
+        return [PurePosixPath(obj_key).relative_to(resolved_key) for obj_key in self.list_object_keys(key)]
 
     # noinspection SpellCheckingInspection
     def iterdir(self) -> Iterable['S3_Bucket_Key']:
-        return [self / key for key in self.list_object_keys()]
+        return [self / key for key in self.list_object_paths()]
 
     @staticmethod
     def _path_to_key(path: PurePosixPath):
@@ -600,7 +601,7 @@ class S3_Bucket(AWS_Session):
     # https://www.tecracer.com/blog/2023/01/what-are-the-folders-in-the-s3-console.html
 
     def __truediv__(
-            self, other: Union[str, Path]
+            self, other: Union[str, PurePath]
     ) -> 'S3_Bucket_Key':
         key = self._get_key(other)
         return self._build_s3_bucket_key(key)

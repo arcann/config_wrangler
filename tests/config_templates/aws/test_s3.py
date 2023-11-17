@@ -122,6 +122,41 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         )
         self.assertEqual(bucket3.get_bucket_region(), self.bucket3_region)
 
+    def test_list_folder_paths(self):
+        folder = S3_Bucket_Folder(
+            bucket_name=self.bucket1_name,
+            folder='folder1',
+            user_id='mock_user',
+            password_source=PasswordSource.CONFIG_FILE,
+            raw_password='super secret password',
+        )
+        expected = {
+            PurePosixPath('file.txt'),
+            PurePosixPath('file2.txt'),
+        }
+        actual = set(folder.list_object_paths())
+        self.assertEqual(expected, actual)
+        for filename in expected:
+            s3_file = folder / filename
+            self.assertTrue(s3_file.exists())
+
+    def test_list_folder_iter(self):
+        folder = S3_Bucket_Folder(
+            bucket_name=self.bucket1_name,
+            folder='folder1',
+            user_id='mock_user',
+            password_source=PasswordSource.CONFIG_FILE,
+            raw_password='super secret password',
+        )
+        actual_set = set()
+        for s3_file in folder.iterdir():
+            self.assertTrue(s3_file.exists())
+            actual_set.add(s3_file.key)
+
+        self.assertIn(self.example2_key, actual_set)
+        self.assertIn(self.example3_key, actual_set)
+        self.assertEqual(2, len(actual_set))
+
     def test_deprecated_find_objects(self):
         bucket = S3_Bucket(
             bucket_name=self.bucket1_name,
