@@ -513,11 +513,20 @@ class S3_Bucket(AWS_Session):
         return [obj.key for obj in obj_collection]
 
     def list_object_paths(self, key: Optional[Union[str, PurePosixPath]] = None) -> List[PurePosixPath]:
+        """
+        Return the relative paths of objects contained in the in/under this object
+        or, if provided, under the object + provided key parameter.
+        :param key:
+            The
+        """
         resolved_key = self._get_key(key)
         return [PurePosixPath(obj_key).relative_to(resolved_key) for obj_key in self.list_object_keys(key)]
 
     # noinspection SpellCheckingInspection
     def iterdir(self) -> Iterable['S3_Bucket_Key']:
+        """
+        Return the S3_Bucket_Key objects contained in the in/under this object.
+        """
         return [self / key for key in self.list_object_paths()]
 
     @staticmethod

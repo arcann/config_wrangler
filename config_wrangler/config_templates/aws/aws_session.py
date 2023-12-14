@@ -9,6 +9,14 @@ except ImportError:
 
 if TYPE_CHECKING:
     from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Key
+    from mypy_boto3_sts import STSClient
+    from mypy_boto3_sts.type_defs import PolicyDescriptorTypeTypeDef, TagTypeDef, ProvidedContextTypeDef
+else:
+    # Provide string values so that type hint code compiles
+    STSClient = 'STSClient'
+    PolicyDescriptorTypeTypeDef = 'PolicyDescriptorTypeTypeDef'
+    TagTypeDef = 'TagTypeDef'
+    ProvidedContextTypeDef = 'TagTypeDef'
 
 # NOTE: If you are not seeing boto3-stubs code completion in Intellij-based IDEs,
 #       please increase the intellisense filesize limit
@@ -44,13 +52,60 @@ class AWS_Session(Credentials):
     def has_session(self) -> bool:
         return self._session is not None
 
-    @property
-    def resource(self):
-        return self._get_resource()
+    def _get_client(self, service: str = None):
+        if service is None:
+            service = self._service
+        # noinspection PyTypeChecker
+        return self.session.client(service, region_name=self.region_name)
 
     @property
     def client(self):
         return self._get_client()
+
+    def get_service_client(self, service: str):
+        return self._get_client(service=service)
+
+    def sts_assume_role(
+            self,
+            role_arn: str,
+            role_session_name: str,
+            policy_arns: Sequence[PolicyDescriptorTypeTypeDef] = ...,
+            policy: str = ...,
+            duration_seconds: int = ...,
+            tags: Sequence[TagTypeDef] = ...,
+            transitive_tag_keys: Sequence[str] = ...,
+            external_id: str = ...,
+            serial_number: str = ...,
+            token_code: str = ...,
+            source_identity: str = ...,
+            provided_contexts: Sequence[ProvidedContextTypeDef] = ...
+    ) -> boto3.session.Session:
+        sts_client = self.get_service_client('sts')  # type: STSClient
+        response = sts_client.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName=role_session_name,
+            PolicyArns=policy_arns,
+            Policy=policy,
+            DurationSeconds=duration_seconds,
+            Tags=tags,
+            TransitiveTagKeys=transitive_tag_keys,
+            ExternalId=external_id,
+            SerialNumber=serial_number,
+            TokenCode=token_code,
+            SourceIdentity=source_identity,
+            ProvidedContexts=provided_contexts,
+        )
+
+        session = boto3.session.Session(
+            aws_access_key_id=response['Credentials']['AccessKeyId'],
+            aws_secret_access_key=response['Credentials']['SecretAccessKey'],
+            aws_session_token=response['Credentials']['SessionToken']
+        )
+
+        # Should we have this new session become the default?
+        self._session = session
+
+        return session
 
     def _get_resource(self, service: str = None):
         if service is None:
@@ -58,11 +113,12 @@ class AWS_Session(Credentials):
         # noinspection PyTypeChecker
         return self.session.resource(service, region_name=self.region_name)
 
-    def _get_client(self, service: str = None):
-        if service is None:
-            service = self._service
-        # noinspection PyTypeChecker
-        return self.session.client(service, region_name=self.region_name)
+    @property
+    def resource(self):
+        return self._get_resource()
+
+    def get_service_resource(self, service: str):
+        return self._get_resource(service=service)
 
     def get_copy(self, copied_by: str = 'get_copy') -> 'AWS_Session':
         return self._factory(cls=self.__class__)
@@ -92,7 +148,7 @@ class AWS_Session(Credentials):
     def split_s3_uri(s3_uri: str) -> Tuple[str, str]:
         parts = s3_uri.split("/", 3)
         # Note 'S3://bucket-name/key-name/file.txt'.split('/', 3)
-        # Returns ['S3:', '', 'bucket-name', 'key-name/file.txt']
+        # Returns [ 'S3:', '', 'bucket-name', 'key-name/file.txt' ]
         if parts[0].lower() != 's3:' or parts[1] != '':
             raise ValueError(f"S3 URI '{s3_uri}' does not appear to be valid")
         if len(parts) == 3:

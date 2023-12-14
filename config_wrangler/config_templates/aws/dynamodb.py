@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from mypy_boto3_dynamodb.client import DynamoDBClient
     from mypy_boto3_dynamodb.service_resource import Table
     from mypy_boto3_dynamodb.type_defs import PutItemOutputTableTypeDef
+    import pynamodb.models
 
 
 class DynamoDB(AWS_Session):
@@ -53,15 +54,13 @@ class DynamoDB(AWS_Session):
             scan_args_list: Iterator[dict],
     ) -> Iterable[dict]:
         log = logging.getLogger('DynamoDB')
-        data = []
-
         start_time = timeit.default_timer()
-        page = 0
-
+        page = 1
         for scan_args in scan_args_list:
             page += 1
             tbl_data = dynamo_table.query(**scan_args)
-            data.extend(tbl_data['Items'])
+            for item in tbl_data['Items']:
+                yield item
 
             while 'LastEvaluatedKey' in tbl_data:
                 page += 1
@@ -69,9 +68,8 @@ class DynamoDB(AWS_Session):
                     log.info(f"Processing query page {page:,}")
                     start_time = timeit.default_timer()
                 tbl_data = dynamo_table.query(ExclusiveStartKey=tbl_data['LastEvaluatedKey'], **scan_args)
-                data.extend(tbl_data['Items'])
-
-        return data
+                for item in tbl_data['Items']:
+                    yield item
 
     def query_dynamo_table_by_name(
             self,
@@ -80,37 +78,35 @@ class DynamoDB(AWS_Session):
             region_name: str = None,  # Deprecated
     ) -> Iterable[dict]:
         dynamo_table = self.get_dynamo_table(dynamo_table_name, region_name=region_name)
-        return self.query_dynamo_table(dynamo_table, scan_args_list)
+        yield from self.query_dynamo_table(dynamo_table, scan_args_list)
 
     def scan_dynamo_table(
         self,
         dynamo_table: 'Table',
-    ):
+    ) -> Iterator[dict]:
         log = logging.getLogger('DynamoDB')
-        data = []
-        tbl_data = dynamo_table.scan()
-        data.extend(tbl_data['Items'])
-
         start_time = timeit.default_timer()
-        page = 0
+        tbl_data = dynamo_table.scan()
+        for item in tbl_data['Items']:
+            yield item
 
+        page = 1
         while 'LastEvaluatedKey' in tbl_data:
             page += 1
             if (timeit.default_timer() - start_time) > self.scan_progress_seconds:
                 log.info(f"Processing scan page {page:,}")
                 start_time = timeit.default_timer()
             tbl_data = dynamo_table.scan(ExclusiveStartKey=tbl_data['LastEvaluatedKey'])
-            data.extend(tbl_data['Items'])
-
-        return data
+            for item in tbl_data['Items']:
+                yield item
 
     def scan_dynamo_table_by_name(
             self,
             dynamo_table_name: str,
             region_name: str = None  # Deprecated
-    ):
+    ) -> Iterable[dict]:
         dynamo_table = self.get_dynamo_table(dynamo_table_name, region_name=region_name)
-        return self.scan_dynamo_table(dynamo_table)
+        yield from self.scan_dynamo_table(dynamo_table)
 
 
 class DynamoDBTable(DynamoDB):
@@ -156,3 +152,41 @@ class DynamoDBTable(DynamoDB):
 
     def put_item(self, item: Mapping[str, Any]) -> 'PutItemOutputTableTypeDef':
         return self.get_dynamo_table().put_item(Item=item)
+
+    def get_connected_pynamodb(
+        self,
+        model: 'pynamodb.models.Model',
+        connect_table_name: Optional[str] = None
+    ) -> 'pynamodb.models.Model':
+        # Optional library
+        from pynamodb.indexes import Index
+
+        if connect_table_name is None:
+            connect_table_name = model.Meta.table_name
+
+        # # We need instance specific versions of the Model class
+        class _ConnectedClass(model):
+            class Meta:
+                connected = True
+                table_name = connect_table_name
+
+        _ConnectedClass.Meta.region = self.region_name
+        _ConnectedClass.Meta.aws_access_key_id = self.user_id
+        _ConnectedClass.Meta.aws_secret_access_key = self.get_password()
+        # Optional, only for temporary credentials like those received when assuming a role
+        credentials = self.session.get_credentials()
+        _ConnectedClass.Meta.aws_session_token = credentials.token
+
+        for attribute_name in dir(_ConnectedClass):
+            attribute = getattr(_ConnectedClass, attribute_name)
+            if isinstance(attribute, Index):
+
+                class InnerIndex(attribute.__class__):
+                    class Meta:
+                        index_name = attribute.Meta.index_name
+                        projection = attribute.Meta.projection
+
+                index_obj = InnerIndex()
+                setattr(_ConnectedClass, attribute_name, index_obj)
+                index_obj.Meta.model = _ConnectedClass
+        return _ConnectedClass

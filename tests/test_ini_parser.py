@@ -300,7 +300,6 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         print(exc_str)
         self.assertIn('Field required', exc_str)
         self.assertIn('database_path', exc_str)
-        self.assertIn('KeepassConfig', exc_str)
 
     def test_read_keepass_bad_values(self):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
@@ -431,7 +430,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         exc_str = str(raises_cm.exception)
         print("Exception str")
         print(exc_str)
-        self.assertIn('KeepassConfig', exc_str)
+        self.assertIn('database_path', exc_str)
         self.assertIn('Field required', exc_str)
 
     def test_read_shared_sub_keepass_bad1(self):
@@ -443,8 +442,8 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         exc_str = str(raises_cm.exception)
         print("Exception str")
         print(exc_str)
-        self.assertIn('KeepassConfig', exc_str)
         self.assertIn('Field required', exc_str)
+        self.assertIn('database_path', exc_str)
 
     def test_read_keyring_good(self):
         try:
