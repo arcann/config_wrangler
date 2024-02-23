@@ -3,17 +3,16 @@ import os
 import unittest
 
 import boto3
-import moto
 from botocore.exceptions import ClientError
-
-from config_wrangler.config_templates.credentials import PasswordSource
+from moto import mock_aws
 from mypy_boto3_secretsmanager.client import SecretsManagerClient
-from tests.base_tests_mixin import Base_Tests_Mixin
 
 from config_wrangler.config_templates.aws.secrets_manager import SecretsManager
+from config_wrangler.config_templates.credentials import PasswordSource
+from tests.base_tests_mixin import Base_Tests_Mixin
 
 
-@moto.mock_secretsmanager
+@mock_aws
 class TestSecretsManager(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
         logging.basicConfig(level=logging.INFO)

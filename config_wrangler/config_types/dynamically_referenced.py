@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import TypeVar, List, Any, Callable
+from typing import TypeVar, List, Any, Callable, Unpack
 
 from pydantic import field_validator
-from pydantic.fields import AliasPath, AliasChoices
+# noinspection PyProtectedMember
+from pydantic.fields import AliasPath, AliasChoices, _FromFieldInfoInputs
 from pydantic_core import PydanticUndefined
 
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
@@ -51,7 +52,7 @@ class DynamicallyReferenced(ConfigHierarchy):
                 try:
                     model = getattr(model, part)
                 except AttributeError:
-                    raise ValueError(f"Referenced section {self.ref} not found in model.")
+                    raise ValueError(f"Referenced section {self.ref} not found in model {model}.")
             return model
 
     def __str__(self):
@@ -68,6 +69,34 @@ class ListDynamicallyReferenced(ConfigHierarchy):
 class DynamicFieldInfo(DelimitedListFieldInfo):
     def __init__(self, delimiter=',', **kwargs) -> None:
         super().__init__(delimiter=delimiter, **kwargs)
+
+    @staticmethod
+    def from_field(default: Any = PydanticUndefined, **kwargs: Unpack[_FromFieldInfoInputs]) -> DynamicFieldInfo:
+        """Create a new `FieldInfo` object with the `Field` function.
+
+        Args:
+            default: The default value for the field. Defaults to Undefined.
+            **kwargs: Additional arguments dictionary.
+
+        Raises:
+            TypeError: If 'annotation' is passed as a keyword argument.
+
+        Returns:
+            A new FieldInfo object with the given parameters.
+
+        Example:
+            This is how you can create a field with default value like this:
+
+            ```python
+            import pydantic
+
+            class MyModel(pydantic.BaseModel):
+                foo: int = pydantic.Field(4)
+            ```
+        """
+        if 'annotation' in kwargs:
+            raise TypeError('"annotation" is not permitted as a DynamicFieldInfo keyword argument')
+        return DynamicFieldInfo(default=default, **kwargs)
 
 
 # noinspection PyPep8Naming

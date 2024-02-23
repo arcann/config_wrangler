@@ -5,8 +5,8 @@ from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
 import boto3
-import moto
 from botocore.exceptions import ClientError
+from moto import mock_aws
 from moto.core import set_initial_no_auth_action_count
 
 from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Folder
@@ -14,7 +14,7 @@ from config_wrangler.config_templates.credentials import PasswordSource
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
-@moto.mock_s3
+@mock_aws
 class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
         logging.basicConfig(level=logging.INFO)

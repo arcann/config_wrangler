@@ -3,7 +3,7 @@ import os
 import unittest
 
 import boto3
-import moto
+from moto import mock_aws
 from mypy_boto3_ssm.client import SSMClient
 
 from config_wrangler.config_templates.aws.ssm import SSM
@@ -11,7 +11,7 @@ from config_wrangler.config_templates.credentials import PasswordSource
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
-@moto.mock_ssm
+@mock_aws
 class TestSSM(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
         logging.basicConfig(level=logging.INFO)

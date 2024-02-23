@@ -1,13 +1,13 @@
 import unittest
 
 import boto3
-import moto
+from moto import mock_aws
 
 from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
-@moto.mock_redshift
+@mock_aws
 class TestSQLAlchemyDatabase(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
         client = boto3.client("redshift", region_name="us-east-1")

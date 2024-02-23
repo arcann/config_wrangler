@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "config_wrangler"
-version = "1.0.14a"
+version = "1.0.15"
 license = "MIT"
 authors = ["Derek Wood"]
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
@@ -10,10 +10,11 @@ documentation = "https://bietl.dev/config_wrangler/"
 
 [tool.poetry.dependencies]
 python = ">=3.9, <4.0.0"
+
 pydantic = ">=2.2"
 StrEnum = ">=0.4.7"
 SQLAlchemy = {version = ">=1.4", optional = true}
-boto3 = {version = ">=1.27", optional = true}
+boto3 = {version = ">=1.33", optional = true}
 cachetools = {version = ">=5.3.1", optional = true}
 pykeepass = {version = ">=4.0.0", optional = true}
 auto-all = ">=1.4.1"
@@ -29,15 +30,20 @@ aws = ["boto3", "cachetools"]
 
 [tool.poetry.group.dev.dependencies]
 tox = "^4.6"
-moto = ">=3.1.9"
-# Optional but required for tests so needed for development
 # Keep boto3 fairly current to avoid scanning a huge list of versions
 boto3 = ">=1.30.0"
 keyring = "^23.9.3"
 pykeepass = ">4.0.0"
 SQLAlchemy = ">=1.4"
-toml = "^0.10.2"
-pynamodb = "^5.5.1"
+toml = ">=0.10.2"
+pynamodb = ">=5.5.1"
+
+[tool.poetry.group.dev.dependencies.moto]
+# Optional but required for tests so needed for development
+version="^5.0.2"
+extras=[
+    "s3", "dynamodb", "redshift", "ssm", "secretsmanager", "lambda", "sts"
+]
 
 [tool.poetry.group.dev.dependencies.boto3-stubs]
 version=">=1.30"

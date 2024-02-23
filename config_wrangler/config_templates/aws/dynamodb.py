@@ -162,7 +162,7 @@ class DynamoDBTable(DynamoDB):
         from pynamodb.indexes import Index
 
         if connect_table_name is None:
-            connect_table_name = model.Meta.table_name
+            connect_table_name = self.table_name or model.Meta.table_name
 
         # # We need instance specific versions of the Model class
         class _ConnectedClass(model):
@@ -189,4 +189,5 @@ class DynamoDBTable(DynamoDB):
                 index_obj = InnerIndex()
                 setattr(_ConnectedClass, attribute_name, index_obj)
                 index_obj.Meta.model = _ConnectedClass
+                index_obj._model = _ConnectedClass
         return _ConnectedClass
