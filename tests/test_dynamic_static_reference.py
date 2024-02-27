@@ -1,8 +1,6 @@
 import unittest
 from typing import List, Dict
 
-from construct import ValidationError
-
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced

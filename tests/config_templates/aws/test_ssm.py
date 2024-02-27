@@ -1,14 +1,17 @@
 import logging
 import os
 import unittest
+from typing import TYPE_CHECKING
 
 import boto3
 from moto import mock_aws
-from mypy_boto3_ssm.client import SSMClient
 
 from config_wrangler.config_templates.aws.ssm import SSM
 from config_wrangler.config_templates.credentials import PasswordSource
 from tests.base_tests_mixin import Base_Tests_Mixin
+
+if TYPE_CHECKING:
+    from mypy_boto3_ssm.client import SSMClient
 
 
 @mock_aws
@@ -16,7 +19,7 @@ class TestSSM(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
         logging.basicConfig(level=logging.INFO)
         self.region = 'us-east-2'
-        self.mock_client: SSMClient = boto3.client('ssm', region_name=self.region)
+        self.mock_client: 'SSMClient' = boto3.client('ssm', region_name=self.region)
 
         self.parameter1 = 'my_parameters/parameter-1'
         self.parameter1_value = "8223"

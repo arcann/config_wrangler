@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from typing import TypeVar, List, Any, Callable, Unpack
+from typing import TypeVar, List, Any, Callable
+try:
+    from typing import Unpack
+except ImportError:
+    Unpack = 'Unpack'
+
 
 from pydantic import field_validator
 # noinspection PyProtectedMember

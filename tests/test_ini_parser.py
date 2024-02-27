@@ -97,6 +97,7 @@ class ConfigWithBadKeypass(ConfigToTestWith):
 class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
         self.test_files_path = self.get_test_files_path()
+        os.chdir(self.get_package_path())
 
     def tearDown(self):
         try:
@@ -517,6 +518,11 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         self.assertEqual(config.test3.get_password(), password)
 
     def test_env_password_keypass(self):
+        try:
+            from pykeepass import PyKeePass
+        except ImportError:
+            raise unittest.SkipTest('pykeepass not installed')
+
         class ConfigEnvKeypass(ConfigRoot):
             test: Credentials
 

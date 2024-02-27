@@ -1,15 +1,18 @@
 import logging
 import os
 import unittest
+from typing import TYPE_CHECKING
 
 import boto3
 from botocore.exceptions import ClientError
 from moto import mock_aws
-from mypy_boto3_secretsmanager.client import SecretsManagerClient
 
 from config_wrangler.config_templates.aws.secrets_manager import SecretsManager
 from config_wrangler.config_templates.credentials import PasswordSource
 from tests.base_tests_mixin import Base_Tests_Mixin
+
+if TYPE_CHECKING:
+    from mypy_boto3_secretsmanager.client import SecretsManagerClient
 
 
 @mock_aws
@@ -17,7 +20,7 @@ class TestSecretsManager(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
         logging.basicConfig(level=logging.INFO)
         self.region = 'us-west-1'
-        self.mock_client: SecretsManagerClient = boto3.client('secretsmanager', region_name=self.region)
+        self.mock_client: 'SecretsManagerClient' = boto3.client('secretsmanager', region_name=self.region)
 
         self.secret1_name = 'secret_id_1'
         self.secret1_value = "one super secret value"
