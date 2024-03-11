@@ -105,6 +105,7 @@ class ConfigRoot(ConfigHierarchy):
                 try:
                     validation_method()
                 except (ValueError, TypeError, AssertionError) as exc:
+                    log.exception(exc)
                     errors.add(f"Failed check {parents}  {qualified_name} with {repr(exc)}")
             elif validation_method_name.startswith('_validate_model_'):
                 warnings.warn(
@@ -115,6 +116,7 @@ class ConfigRoot(ConfigHierarchy):
                 try:
                     validation_method()
                 except (ValueError, TypeError, AssertionError) as exc:
+                    log.exception(exc)
                     errors.add(f"Failed check {parents}  {qualified_name} with {repr(exc)}")
 
     def validate_model(self):

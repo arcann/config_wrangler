@@ -71,6 +71,9 @@ class SQLAlchemyDatabase(Credentials):
     @model_validator(mode="before")
     @classmethod
     def translate(cls, values):
+        if not isinstance(values, dict):
+            raise ValueError(f"translate values: {values} must be a dict not {type(values)}")
+        
         # Convert from old setting names to new names
         name_map = {
             'dsn': 'host',

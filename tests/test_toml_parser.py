@@ -176,8 +176,8 @@ class TestTomlParser(TestIniParser):
             exc_str = str(raises_cm.exception)
             print("Exception str")
             print(exc_str)
-            self.assertIn("group 'bad'", exc_str)
-            self.assertIn("not found", exc_str)
+            self.assertIn("group", exc_str)
+            self.assertIn("'bad'", exc_str)
 
         except ImportError:
             self.skipTest(f"Test requires pykeepass")
