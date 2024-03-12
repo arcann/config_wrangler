@@ -49,7 +49,7 @@ class KeepassConfig(ConfigHierarchy):
         kp = self.open_database()
         results = list()
         for group_object in kp.groups:
-            if group_object.name is not None and group_object.name.lower() == group:
+            if group_object.name is not None and group_object.name.lower() == group.lower():
                 for entry in group_object.entries:
                     results.append(entry)
         return results
