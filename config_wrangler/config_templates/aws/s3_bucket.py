@@ -97,6 +97,13 @@ class S3_Bucket(AWS_Session):
     def client(self) -> 'S3Client':
         return super().client
 
+    def get_bucket_region_name(self) -> str:
+        region = self.client.get_bucket_location(Bucket=self.bucket_name)['LocationConstraint']
+        # Buckets in Region us-east-1 have a LocationConstraint of null
+        if region is None:
+            region = 'us-east-1'
+        return region
+
     @staticmethod
     def _boto3_error(ex: ClientError) -> str:
         return ex.response.get('Error', {}).get('Code')
@@ -516,8 +523,8 @@ class S3_Bucket(AWS_Session):
         """
         Return the relative paths of objects contained in the in/under this object
         or, if provided, under the object + provided key parameter.
-        :param key:
-            The
+
+
         """
         resolved_key = self._get_key(key)
         return [PurePosixPath(obj_key).relative_to(resolved_key) for obj_key in self.list_object_keys(key)]

@@ -3,6 +3,8 @@ import os
 import unittest
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
+import requests
+import requests_mock
 
 import boto3
 from botocore.exceptions import ClientError
@@ -568,3 +570,34 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
                 )
         print(raises_ex.exception.response)
         self.assertEqual(raises_ex.exception.response['Error']['Code'], "InvalidAccessKeyId")
+
+    def test_request_auth(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        bucket.region_name = bucket.get_bucket_region_name()
+        try:
+            auth = bucket.get_request_v4_authorizer()
+        except ImportError:
+            self.skipTest("Extra aws_request_auth not installed")
+
+        with requests_mock.mock() as m:
+            url = 'https://localhost/test'
+            m.put(url, text='test')
+            requests.put(url, auth=auth)
+            mock_result = m.request_history[0]
+            self.assertEqual('mock_user', auth.access_id)
+            self.assertEqual('super secret password', auth.refreshable_credentials.secret_key)
+            self.assertIn('x-amz-date', mock_result.headers)
+            self.assertIn('x-amz-content-sha256', mock_result.headers)
+            self.assertIn('Authorization', mock_result.headers)
+            mock_auth = mock_result.headers.get('Authorization')
+            self.assertIsNotNone(mock_auth)
+            self.assertIn('AWS4', mock_auth)
+            self.assertIn('Credential=', mock_auth)
+            self.assertIn('SignedHeaders=', mock_auth)
+            self.assertIn('Signature=', mock_auth)
+

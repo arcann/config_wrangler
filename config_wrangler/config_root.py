@@ -1,5 +1,6 @@
 import inspect
 import logging
+import sys
 import warnings
 from typing import List, Any
 
@@ -133,4 +134,5 @@ class ConfigRoot(ConfigHierarchy):
                 log.error(error)
             indent = ' ' * 3
             errors_str = f"\n{indent}".join(errors)
+            sys.tracebacklimit = 0
             raise ValueError(f"Config Errors (cnt={len(errors)}). Errors=\n{indent}{errors_str}")

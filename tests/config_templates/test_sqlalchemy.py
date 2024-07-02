@@ -3,13 +3,19 @@ import unittest
 import boto3
 from moto import mock_aws
 
-from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
 @mock_aws
 class TestSQLAlchemyDatabase(unittest.TestCase, Base_Tests_Mixin):
     def setUp(self):
+        try:
+            import sqlalchemy
+        except ImportError:
+            raise self.skipTest('Extra sqlalchemy not installed')
+        from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
+        self.SQLAlchemyDatabase = SQLAlchemyDatabase
+
         client = boto3.client("redshift", region_name="us-east-1")
         self.cluster_identifier = 'mock_cluster'
         client.create_cluster(
@@ -22,7 +28,7 @@ class TestSQLAlchemyDatabase(unittest.TestCase, Base_Tests_Mixin):
         )
 
     def test_redshift_uri_cluster_creds(self):
-        config = SQLAlchemyDatabase(
+        config = self.SQLAlchemyDatabase(
             dialect='redshift+psycopg2',
             use_get_cluster_credentials=True,
             host='mock.us-east-1.redshift.amazonaws.com',
@@ -48,7 +54,7 @@ class TestSQLAlchemyDatabase(unittest.TestCase, Base_Tests_Mixin):
         self.assertNotEqual(uri.password, uri2.password)
 
     def test_redshift_uri_cluster_creds_with_groups(self):
-        config = SQLAlchemyDatabase(
+        config = self.SQLAlchemyDatabase(
             dialect='redshift+psycopg2',
             use_get_cluster_credentials=True,
             host='mock.us-east-1.redshift.amazonaws.com',
@@ -76,7 +82,7 @@ class TestSQLAlchemyDatabase(unittest.TestCase, Base_Tests_Mixin):
         self.assertNotEqual(uri.password, uri2.password)
 
     def test_redshift_uri_db_creds(self):
-        config = SQLAlchemyDatabase(
+        config = self.SQLAlchemyDatabase(
             dialect='redshift+psycopg2',
             use_get_cluster_credentials=False,
             host='mock.us-east-1.redshift.amazonaws.com',

@@ -1,9 +1,10 @@
 import os
-from typing import *
 from copy import deepcopy
 from pathlib import Path
+from typing import *
 
 from pydantic import BaseModel
+from pydicti import Dicti
 
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
 from config_wrangler.utils import merge_configs, match_config_data_to_model
@@ -26,6 +27,9 @@ class FileConfigDataLoader(BaseConfigDataLoader):
     def _read_file(self, file_path: Path) -> MutableMapping:
         raise NotImplementedError()
 
+    def _read_file_case_insensitive(self, file_path: Path) -> Dicti:
+        return Dicti(self._read_file(file_path))
+
     def _merge_files_into_config_data(
             self, config_data: MutableMapping,
             path: Path,
@@ -37,7 +41,7 @@ class FileConfigDataLoader(BaseConfigDataLoader):
             full_path = Path(path, file_name)
 
         if full_path.exists():
-            file_config_data = self._read_file_plus_inherited(full_path)
+            file_config_data = Dicti(self._read_file_plus_inherited(full_path))
             # Check for and remove any [Config] parent settings.
             # They should have already been used, but we don't want to merge them up
             if self.config_inheritance_section in file_config_data:
@@ -51,10 +55,10 @@ class FileConfigDataLoader(BaseConfigDataLoader):
 
     def _check_inherited_files(
             self,
-            config_data: MutableMapping,
+            config_data: Dicti,
             path: Path,
 
-    ) -> MutableMapping:
+    ) -> Dicti:
         if self.config_inheritance_section in config_data:
             for field_name in config_data[self.config_inheritance_section]:
                 if field_name.startswith(self.config_inheritance_field_name_prefix):
@@ -67,7 +71,7 @@ class FileConfigDataLoader(BaseConfigDataLoader):
         return config_data
 
     def _read_file_plus_inherited(self, file_path: Path):
-        file_config_data = self._read_file(file_path)
+        file_config_data = self._read_file_case_insensitive(file_path)
         folder = file_path.parents[0]
         with_parents_added = self._check_inherited_files(file_config_data, path=folder)
         return with_parents_added

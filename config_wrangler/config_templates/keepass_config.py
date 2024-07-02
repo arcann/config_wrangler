@@ -10,6 +10,18 @@ from config_wrangler.config_types.path_types import PathFindUpExpandUser
 
 @public
 class KeepassConfig(ConfigHierarchy):
+    """
+    Read passwords from a keepass database.
+    Performance Note:
+        The default Key function AES-KDF is very slow in Python.
+        Argon2d is better with Python and still secure.
+        https://keepass.info/help/base/security.html#secdictprotect
+
+    Note: A password is still needed to open & decrypt the keepass database.
+    The default source of that password is KEYRING. However, any valid `PasswordSource`
+    can be used. This allows
+    """
+
     user_id: str = 'KEEPASS'
     database_path: PathFindUpExpandUser
     default_group: Optional[str] = None

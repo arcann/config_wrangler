@@ -31,24 +31,140 @@ if TYPE_CHECKING:
 
 class SQLAlchemyDatabase(Credentials):
     dialect: str
+    """
+    The SQLAlchemy dialect to use.  See https://docs.sqlalchemy.org/en/20/dialects/
+    """
+
     driver: Optional[str] = None
+    """
+    The python database driver to use. 
+    This is optional in the SQLAlchemy connection string it would be the optional +driver value
+    that can come after the dialect name.
+    
+    For example:
+    
+    .. code-block:: ini
+    
+        dialect=postgresql
+        driver=psycopg2
+        
+    Would generate a connection string like:
+    
+    .. code-block:: text
+    
+        postgresql+psycopg2://user:password@host:port/dbname
+        
+    You could also provide both dialect and driver in the dialect field like this:
+    
+    .. code-block:: ini
+    
+        dialect=postgresql+psycopg2                        
+    """
+
     host: Optional[str] = None
+    """
+    Hostname or IP number. May also be a data source name for some drivers.
+    https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.engine.URL.host
+    """
+
     port: Optional[int] = None
+    """
+    Integer port number.
+    https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.engine.URL.port
+    """
+
     database_name: str
+    """
+    https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.engine.URL.database
+    """
+
     use_get_cluster_credentials: bool = False
+    """
+    For Amazon Redshift only.  Should the boto3 call be performed to get temporary 
+    database credentials?  If so, then rs_db_user_id is required.
+    """
+
     rs_new_credentials_seconds: int = 1800
-    rs_region_name: Optional[str] = None
-    rs_cluster_id: Optional[str] = None
-    rs_auto_create: Optional[bool] = None
-    rs_db_groups: Optional[List[str]] = None
-    aws_access_key_id: Optional[str] = None
-    aws_secret_access_key: Optional[str] = None
-    rs_db_user_id: Optional[str] = None
+    """
+    For Amazon Redshift and with use_get_cluster_credentials = True only.
+    How long should we wait before requesting new temporary credentials last (in seconds).
+    This should be less than the value used in rs_duration_seconds.
+    Note: The server might respond with an even shorter duration, if so that will be used.  
+    """
+
     rs_duration_seconds: Optional[int] = 3600
+    """
+    For Amazon Redshift and with use_get_cluster_credentials = True only.
+    The value here is passed to the boto3 get_cluster_credentials call.   
+    """
+
+    rs_region_name: Optional[str] = None
+    """
+    For Amazon Redshift only. The region_name to use.
+    """
+
+    rs_cluster_id: Optional[str] = None
+    """
+    For Amazon Redshift only. The cluster name to use.
+    """
+
+    rs_auto_create: Optional[bool] = None
+    """
+    For Amazon Redshift and with use_get_cluster_credentials = True only.
+    The value here is passed to the boto3 get_cluster_credentials call.   
+    """
+
+    rs_db_groups: Optional[List[str]] = None
+    """
+    For Amazon Redshift and with use_get_cluster_credentials = True only.
+    The value here is passed to the boto3 get_cluster_credentials call.   
+    """
+
+    aws_access_key_id: Optional[str] = None
+    """
+    For Amazon Redshift and with use_get_cluster_credentials = True only.
+    If provided, use this access key to authenticate for the use_get_cluster_credentials call.
+    If not provided, the user_id value will be used instead.   
+    """
+
+    aws_secret_access_key: Optional[str] = None
+    """
+    For Amazon Redshift and with use_get_cluster_credentials = True only.
+    If provided, use this access key to authenticate for the use_get_cluster_credentials call.
+    If not provided, get_password() will be used to get the password from the configured 
+    password source (see `PasswordSource` for options.)   
+    """
+
+    rs_db_user_id: Optional[str] = None
+    """
+    For Amazon Redshift and with use_get_cluster_credentials = True only.
+    The value here is passed to the boto3 get_cluster_credentials call.   
+    """
+
     create_engine_args: Dict[str, Any] = {}
-    arraysize: Optional[int] = 5000  # Only used for Oracle
+    """
+    A dictionary with extra arguments to pass to the SQLAlchemy create_engine function.
+    See
+    https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.create_engine    
+    """
+
+    arraysize: Optional[int] = 5000
+    """
+    Only used for Oracle. Passed to SQLAlchemy create_engine function.
+    """
+
     encoding: Optional[str] = None
+    """
+    Passed to SQLAlchemy create_engine function.
+    """
+
     poolclass: Optional[str] = None
+    """
+    Pool subclass that should be passed to SQLAlchemy create_engine function.
+    Only supports None, QueuePool or NullPool.
+    See
+    https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.create_engine.params.poolclass
+    """
 
     # Private attribute used to hold the engine
     _engine = PrivateAttr(default=None)
@@ -275,9 +391,18 @@ class SQLAlchemyDatabase(Credentials):
         return self._engine
 
     def raw_connection(self):
+        """
+        Return a "raw" DBAPI connection from the connection pool.
+
+        See https://docs.sqlalchemy.org/en/20/core/connections.html#sqlalchemy.engine.Engine.raw_connection
+        """
         return self.get_engine().raw_connection()
 
-    def connect(self):
+    def connect(self) -> 'sqlalchemy.engine.base.Connection':
+        """
+        Connect to the configured database.
+        Special handling for sqlite where subsequent calls will return the same connection.
+        """
         if self.dialect == 'sqlite':
             if self._sqlite_connection is None or self._sqlite_connection.closed:
                 self._sqlite_connection = self.get_engine().connect()
@@ -286,4 +411,7 @@ class SQLAlchemyDatabase(Credentials):
             return self.get_engine().connect()
 
     def session(self) -> Session:
+        """
+        Build a SQLAlchemy session from the configured database.
+        """
         return Session(bind=self.get_engine())

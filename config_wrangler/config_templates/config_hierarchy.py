@@ -41,7 +41,8 @@ class ConfigHierarchy(BaseModel):
         validate_credentials=True
     )
     _root_config: 'ConfigFromLoaders' = PrivateAttr(default=None)
-    _parents: List[str] = PrivateAttr(default=['parents_not_set'])
+    _DEFAULT_PARENTS = ['parents_not_set']
+    _parents: List[str] = PrivateAttr(default=_DEFAULT_PARENTS)
     _name_map: Dict[str, str] = PrivateAttr(default={})
     _private_value_atts = PrivateAttr(default={})
 
@@ -104,10 +105,15 @@ class ConfigHierarchy(BaseModel):
         """
         The fully qualified name of this config item in the config hierarchy.
         """
-        if item_name is None:
-            return delimiter.join(self._parents)
+        if self._parents == self._DEFAULT_PARENTS:
+            parents = [self.__class__.__name__]
         else:
-            return delimiter.join(self._parents + [item_name])
+            parents = self._parents
+
+        if item_name is None:
+            return delimiter.join(parents)
+        else:
+            return delimiter.join(parents + [item_name])
 
     @staticmethod
     def translate_config_data(config_data: MutableMapping):

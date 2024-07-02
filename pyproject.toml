@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "config_wrangler"
-version = "1.1.0"
+version = "1.2.0a"
 license = "MIT"
 authors = ["Derek Wood"]
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
@@ -9,34 +9,41 @@ repository = "https://github.com/arcann/config_wrangler"
 documentation = "https://bietl.dev/config_wrangler/"
 
 [tool.poetry.dependencies]
-python = ">=3.9, <4.0.0"
+python = ">=3.10, <4.0.0"
 
-pydantic = ">=2.2"
+pydantic = ">=1.10"
 StrEnum = ">=0.4.7"
-SQLAlchemy = {version = ">=1.4", optional = true}
-boto3 = {version = ">=1.33", optional = true}
-cachetools = {version = ">=5.3.1", optional = true}
-pykeepass = {version = ">=4.0.0", optional = true}
 auto-all = ">=1.4.1"
 pydicti = ">=1.1.6"
 typing-extensions = ">=4.7.1"
+SQLAlchemy = {version = ">=1.4", optional = true}
+# Keep boto3 fairly current to avoid scanning a huge list of versions
+boto3 = {version = ">=1.33", optional = true}
+requests-aws4auth = {version = ">=1.2.3", optional = true}
+cachetools = {version = ">=5.3.1", optional = true}
+pykeepass = {version = ">=4.0.0", optional = true}
+toml = {version = ">=0.10.2", optional = true}
+keyring = {version = "^23.9.3", optional = true}
 
 [tool.poetry.extras]
 sqlalchemy = ["SQLAlchemy"]
-pykeepass = ["pykeepass"]
+# Note: pykeepass 4.0.7.post1 requires setuptools. They seem to be headed towards fixing that.
+pykeepass = ["pykeepass", "setuptools"]
 redshift = ["boto3"]
 s3 = ["boto3", "cachetools"]
 aws = ["boto3", "cachetools"]
+aws_request_auth = ["requests-aws4auth"]
+toml = ["toml"]
+keyring = ["keyring"]
 
 [tool.poetry.group.dev.dependencies]
+# Note: Install for full dev with this command:
+#       poetry install --sync --all-extras
+#       or to test with only one extra (can also use tox setup to do that)
+#       poetry install --sync -E sqlalchemy
 tox = "^4.6"
-# Keep boto3 fairly current to avoid scanning a huge list of versions
-boto3 = ">=1.30.0"
-keyring = "^23.9.3"
-pykeepass = ">4.0.0"
-SQLAlchemy = ">=1.4"
-toml = ">=0.10.2"
-pynamodb = ">=5.5.1"
+pytest = ">=8.2"
+requests-mock = "^1.12.1"
 
 [tool.poetry.group.dev.dependencies.moto]
 # Optional but required for tests so needed for development

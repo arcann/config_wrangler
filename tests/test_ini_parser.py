@@ -6,18 +6,18 @@ from typing import *
 from unittest import mock
 
 import pydantic
-from pydantic import Field, AnyHttpUrl, DirectoryPath
-from pydantic_core import Url
-
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_root import ConfigRoot
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.credentials import Credentials
 from config_wrangler.config_templates.keepass_config import KeepassConfig
-from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
 from config_wrangler.config_types.delimited_field import DelimitedListField
 from config_wrangler.config_wrangler_config import ConfigWranglerConfig
+from pydantic import Field, AnyHttpUrl, DirectoryPath
+
+from pydantic_core import Url
 from tests.base_tests_mixin import Base_Tests_Mixin
+from tests.simulate_database import SimDatabase
 
 
 class Environment(ConfigHierarchy):
@@ -69,7 +69,7 @@ class ConfigToTestWith(ConfigFromIniEnv):
         validate_credentials=True,
     )
 
-    target_database: SQLAlchemyDatabase
+    target_database: SimDatabase
 
     test_section: TestSection
 

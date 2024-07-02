@@ -7,12 +7,11 @@ import pydantic
 from config_wrangler.config_from_toml_env import ConfigFromTomlEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.keepass_config import KeepassConfig
-from config_wrangler.config_templates.sqlalchemy_database import SQLAlchemyDatabase
-from test_ini_parser import TestSection, TestIniParser, TestSettings
-
+from tests.test_ini_parser import TestSection, TestIniParser, TestSettings
+from tests.simulate_database import SimDatabase
 
 class ConfigToTestWith(ConfigFromTomlEnv):
-    target_database: SQLAlchemyDatabase
+    target_database: SimDatabase
 
     test_section: TestSection
 

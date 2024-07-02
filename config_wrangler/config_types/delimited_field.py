@@ -1,9 +1,13 @@
 from __future__ import annotations as _annotations
+
+import typing
 from typing import Any, Callable
 
-from pydantic.fields import FieldInfo, AliasPath, AliasChoices
+from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
+if typing.TYPE_CHECKING:
+    from pydantic.fields import AliasPath, AliasChoices
 
 class DelimitedListFieldInfo(FieldInfo):
     delimiter: str

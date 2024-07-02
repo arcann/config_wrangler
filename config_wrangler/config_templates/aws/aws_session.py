@@ -171,3 +171,13 @@ class AWS_Session(Credentials):
         return self._factory(
             SecretsManager,
         )
+
+    def get_request_v4_authorizer(self, service: str = None) -> 'requests.auth.AuthBase':
+        from requests_aws4auth  import AWS4Auth
+        if service is None:
+            service = self._service
+        return AWS4Auth(
+            region=self.region_name,
+            service=service,
+            refreshable_credentials=self.session.get_credentials(),
+        )

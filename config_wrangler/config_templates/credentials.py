@@ -81,7 +81,7 @@ class Credentials(ConfigHierarchy):
 
     def _get_password_keyring(self):
         if self.keyring_section is None:
-            raise ValueError(f"{self.full_item_name()} keyring_section is None but password_source was keyring")
+            raise ValueError(f"{self.full_item_name()} password_source is KEYRING but keyring_section is None")
         import keyring
         password = keyring.get_password(self.keyring_section, self.user_id)
         search_info = f"{self.keyring_section} {self.user_id}"
@@ -254,7 +254,7 @@ class Credentials(ConfigHierarchy):
         if self.password_source == PasswordSource.KEYRING:
             keyring_section = self.keyring_section
             if keyring_section is None:
-                raise ValueError(f"{self} keyring_section is None but password_source was keyring")
+                raise ValueError(f"{self.full_item_name()} password_source is KEYRING but keyring_section is None")
         elif self.password_source == PasswordSource.CONFIG_FILE:
             password = self.raw_password
             if password is None or password == '':
@@ -262,7 +262,14 @@ class Credentials(ConfigHierarchy):
         return self
 
     @config_hierarchy_validator
-    def check_config_hierarchy(self):
+    def _check_config_hierarchy(self):
+        """
+        Validator for checking that credentials are valid.
+        The validation is performed if all of these are True:
+        - validate_credentials is True or not set in the root model_config object.
+        - validate_default is True or not set in the root model_config object.
+        - validate_password_on_load is True (defaults to True) in this Credentials based object.
+        """
         if self._root_config is None:
             raise ValueError("Credentials are not part of a ConfigRoot hierarchy")
         else:

@@ -3,6 +3,16 @@ from pathlib import Path
 
 import toml
 
+# Work around dynamic import issue
+# https://github.com/pydantic/pydantic/discussions/7763
+
+import config_wrangler.config_templates.logging_config
+import config_wrangler.config_templates.credentials
+import config_wrangler.config_templates.sqlalchemy_database
+import config_wrangler.config_templates.aws.s3_bucket
+import config_wrangler.config_templates.aws.dynamodb
+
+
 package_root = Path(__file__).parents[2].absolute()
 poetry_config = toml.load(str(package_root / 'pyproject.toml'))
 
