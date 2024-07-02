@@ -11,7 +11,7 @@ documentation = "https://bietl.dev/config_wrangler/"
 [tool.poetry.dependencies]
 python = ">=3.10, <4.0.0"
 
-pydantic = ">=1.10"
+pydantic = ">=2.0"
 StrEnum = ">=0.4.7"
 auto-all = ">=1.4.1"
 pydicti = ">=1.1.6"
