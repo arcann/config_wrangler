@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "config_wrangler"
-version = "1.2.0a"
+version = "1.2.1"
 license = "MIT"
 authors = ["Derek Wood"]
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."

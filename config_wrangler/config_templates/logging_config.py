@@ -68,7 +68,7 @@ class LoggingConfig(ConfigHierarchy):
     log_files_to_keep: int = 10
     logging_date_format: str = '%Y-%m-%d %H:%M:%S%z'
     trace_logging_setup: bool = False
-    log_levels: Dict[str, LogLevel]
+    log_levels: Dict[str, LogLevel] = {}
 
     @model_validator(mode='after')
     def _validate_logging(self):
