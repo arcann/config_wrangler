@@ -282,6 +282,8 @@ class TestTomlParser(TestIniParser):
             import keyring
         except ImportError:
             keyring = None
+        except keyring.errors.NoKeyringError:
+            self.skipTest(f"Test requires keyring backend")
 
         try:
             password = 'mysuperpassword'
@@ -297,6 +299,8 @@ class TestTomlParser(TestIniParser):
             d = config.model_dump()
             self.assertEqual(d['test_section']['my_url'], config.test_section.my_url)
             self.assertEqual(d['test_section']['my_int'], config.test_section.my_int)
+        except keyring.errors.NoKeyringError:
+            self.skipTest(f"Test requires keyring backend")
         except (ValueError, ImportError) as e:
             if "No module named 'keyring'" in str(e):
                 if keyring is None:
