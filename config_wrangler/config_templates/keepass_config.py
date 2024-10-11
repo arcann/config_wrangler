@@ -41,6 +41,10 @@ class KeepassConfig(ConfigHierarchy):
 
             credentials_args = dict(**self.__dict__)
             if self.password_source == PasswordSource.KEYRING:
+                if self.keyring_user_id is None:
+                    raise ValueError(f"Keepass set to get password from KEYRING but keyring_user_id is not set")
+                if self.keyring_section is None:
+                    raise ValueError(f"Keepass set to get password from KEYRING but keyring_section is not set")
                 credentials_args['user_id'] = self.keyring_user_id
             else:
                 credentials_args['user_id'] = 'KEEPASS'

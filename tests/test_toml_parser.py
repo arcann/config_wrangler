@@ -281,7 +281,7 @@ class TestTomlParser(TestIniParser):
         try:
             import keyring
         except ImportError:
-            keyring = None
+            self.skipTest(f"Test requires keyring")
         except keyring.errors.NoKeyringError:
             self.skipTest(f"Test requires keyring backend")
 

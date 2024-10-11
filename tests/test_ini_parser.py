@@ -450,15 +450,13 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         try:
             import keyring
         except ImportError:
-            keyring = None
+            self.skipTest(f"Test requires keyring")
         except keyring.errors.NoKeyringError:
             self.skipTest(f"Test requires keyring backend")
 
         try:
             password = 'mysuperpassword'
-            if keyring is not None:
-                # If keyring is actually installed, use it to set the password
-                keyring.set_password('example_section', 'python_unittester_01', password)
+            keyring.set_password('example_section', 'python_unittester_01', password)
             config = ConfigToTestWith(
                 file_name='test_keyring.ini',
                 start_path=self.get_test_files_path()
