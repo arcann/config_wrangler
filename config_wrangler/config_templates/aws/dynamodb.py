@@ -74,7 +74,7 @@ class DynamoDB(AWS_Session):
     def query_dynamo_table_by_name(
             self,
             dynamo_table_name: str,
-            scan_args_list: Iteratable[dict],
+            scan_args_list: Iterable[dict],
             region_name: str = None,  # Deprecated
     ) -> Iterable[dict]:
         dynamo_table = self.get_dynamo_table(dynamo_table_name, region_name=region_name)
@@ -121,7 +121,7 @@ class DynamoDBTable(DynamoDB):
 
     def query_dynamo_table(
             self,
-            scan_args_list: Iteratable[dict],
+            scan_args_list: Iterable[dict],
             **kwargs
     ) -> Iterable[dict]:
         parent_table_arg = 'dynamo_table_name'
