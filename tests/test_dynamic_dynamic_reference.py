@@ -10,6 +10,7 @@ from tests.base_tests_mixin import Base_Tests_Mixin
 class Product(ConfigHierarchy):
     name: str
     weight: int
+    color: str = 'Not available'
 
 
 class TestReferenceSection(ConfigHierarchy):
@@ -54,9 +55,13 @@ class TestDynamicDynamicRef(unittest.TestCase, Base_Tests_Mixin):
             product4 = list_of_products[3]
 
             self.assertEqual(product1.name, 'Granny Smith')
+            self.assertEqual(product1.color, 'Green')
             self.assertEqual(product2.name, 'Over-ripe')
+            self.assertEqual(product2.color, 'Green')
             self.assertEqual(product3.name, 'Best Pear')
+            self.assertEqual(product3.color, 'Yellow')
             self.assertEqual(product4.name, 'Model T')
+            self.assertEqual(product4.color, 'Not available')
             self.assertEqual(product1.weight, 15)
             self.assertEqual(product2.weight, 10)
             self.assertEqual(product3.weight, 18)

@@ -108,81 +108,99 @@ def resolve_variable(root_config_data: MutableMapping, variable_name: str, part_
 
 _interpolation_re = re.compile(r"\${([^}]+)}")
 
+def interpolate_value(value: str, root_config_data: MutableMapping) -> str:
+    if '$' not in value:
+        return value
+    else:
+        depth = 0
+        done = False
+        new_value = value
+        while not done:
+            done = True
+            depth += 1
+            variables_cnt = 0
+            result_values = []
+            next_start = 0
+            if isinstance(new_value, str):
+                for variable_found in _interpolation_re.finditer(new_value):
+                    variables_cnt += 1
+                    variable_name = variable_found.groups()[0]
+                    var_start, var_end = variable_found.span()
 
-def interpolate_values(container: MutableMapping, root_config_data: MutableMapping) -> List[Tuple[str, str]]:
+                    part_delimiter = None
+                    if ':' in variable_name:
+                        part_delimiter = ':'
+
+                    elif '.' in variable_name:
+                        part_delimiter = '.'
+
+                    variable_replacement = 'ERROR'
+                    if part_delimiter is not None:
+                        try:
+                            variable_replacement = resolve_variable(
+                                root_config_data,
+                                variable_name,
+                                part_delimiter=part_delimiter,
+                            )
+                        except ValueError as e:
+                            errors.append((section, str(e),))
+                    else:
+                        try:
+                            # Change to case-insensitive dict
+                            search_container = Dicti(container)
+                            variable_replacement = search_container[variable_name]
+                        except KeyError:
+                            errors.append((section, f"<<{variable_name} NOT FOUND>>",))
+
+                    result_values.append(new_value[next_start:var_start])
+                    result_values.append(variable_replacement)
+                    next_start = var_end
+                if variables_cnt > 0:
+                    if next_start < len(new_value):
+                        result_values.append(new_value[next_start:])
+                    result_values = [part for part in result_values if part != '']
+                    if len(result_values) == 1:
+                        # Possibly not a string -- maybe a dict
+                        new_value = result_values[0]
+                        if not isinstance(new_value, str):
+                            done = True
+                    else:
+                        new_value = ''.join([str(v) for v in result_values])
+
+                    if depth < 50:
+                        done = False
+                    else:
+                        raise ValueError(
+                            f"Interpolation recursion depth limit reached on value {value} "
+                            f"ended processing with {new_value}"
+                        )
+        return new_value
+
+def interpolate_values(container: Union[MutableMapping,BaseModel], root_config_data: MutableMapping) -> List[Tuple[str, str]]:
     errors = []
-    for section in container:
-        value = container[section]
-        if isinstance(value, MutableMapping):
+    if isinstance(container, MutableMapping):
+        mapping_mode = True
+        value_tuples = container.items()
+    else:
+        mapping_mode = False
+        value_tuples = list(container)
+
+    for attr, value in value_tuples:
+        if isinstance(value, MutableMapping) or isinstance(value, BaseModel):
             sub_errors = interpolate_values(value, root_config_data=root_config_data)
             errors.extend(sub_errors)
+        elif isinstance(value, list) or isinstance(value, tuple):
+            for sub_value in value:
+                sub_errors = interpolate_values(sub_value, root_config_data=root_config_data)
+                errors.extend(sub_errors)
         elif isinstance(value, str):
-            if '$' in value:
-                depth = 0
-                done = False
-                new_value = value
-                while not done:
-                    done = True
-                    depth += 1
-                    variables_cnt = 0
-                    result_values = []
-                    next_start = 0
-                    if isinstance(new_value, str):
-                        for variable_found in _interpolation_re.finditer(new_value):
-                            variables_cnt += 1
-                            variable_name = variable_found.groups()[0]
-                            var_start, var_end = variable_found.span()
-
-                            part_delimiter = None
-                            if ':' in variable_name:
-                                part_delimiter = ':'
-
-                            elif '.' in variable_name:
-                                part_delimiter = '.'
-
-                            variable_replacement = 'ERROR'
-                            if part_delimiter is not None:
-                                try:
-                                    variable_replacement = resolve_variable(
-                                        root_config_data,
-                                        variable_name,
-                                        part_delimiter=part_delimiter,
-                                    )
-                                except ValueError as e:
-                                    errors.append((section, str(e),))
-                            else:
-                                try:
-                                    # Change to case-insensitive dict
-                                    search_container = Dicti(container)
-                                    variable_replacement = search_container[variable_name]
-                                except KeyError:
-                                    errors.append((section, f"<<{variable_name} NOT FOUND>>",))
-
-                            result_values.append(new_value[next_start:var_start])
-                            result_values.append(variable_replacement)
-                            next_start = var_end
-                        if variables_cnt > 0:
-                            if next_start < len(new_value):
-                                result_values.append(new_value[next_start:])
-                            result_values = [part for part in result_values if part != '']
-                            if len(result_values) == 1:
-                                # Possibly not a string -- maybe a dict
-                                new_value = result_values[0]
-                                if not isinstance(new_value, str):
-                                    done = True
-                            else:
-                                new_value = ''.join([str(v) for v in result_values])
-
-                            if depth < 50:
-                                done = False
-                            else:
-                                raise ValueError(
-                                    f"Interpolation recursion depth limit reached on value {value} "
-                                    f"ended processing with {new_value}"
-                                )
-                container[section] = new_value
+            new_value = interpolate_value(value, root_config_data=root_config_data)
+            if new_value != value:
+                if mapping_mode:
+                    container[attr] = new_value
+                else:
+                    setattr(container, attr, new_value)
     return errors
-
 
 def parse_as_literal_or_json(value: str) -> Any:
     try:
