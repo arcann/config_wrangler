@@ -5,7 +5,9 @@ from datetime import date, time, datetime
 from typing import *
 from unittest import mock
 
-import pydantic
+from pydantic import Field, AnyHttpUrl, DirectoryPath
+from pydantic_core import Url
+
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_root import ConfigRoot
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
@@ -13,9 +15,6 @@ from config_wrangler.config_templates.credentials import Credentials
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from config_wrangler.config_types.delimited_field import DelimitedListField
 from config_wrangler.config_wrangler_config import ConfigWranglerConfig
-from pydantic import Field, AnyHttpUrl, DirectoryPath
-
-from pydantic_core import Url
 from tests.base_tests_mixin import Base_Tests_Mixin
 from tests.simulate_database import SimDatabase
 
@@ -247,14 +246,14 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
             _ = ConfigToTestWith(file_name='test_good.ini')
 
     def test_read_no_password(self):
-        with self.assertRaises(pydantic.ValidationError):
+        with self.assertRaises(ValueError):
             _ = ConfigToTestWith(
                 file_name='test_no_pw.ini',
                 start_path=self.get_test_files_path()
             )
 
     def test_missing_section(self):
-        with self.assertRaises(pydantic.ValidationError):
+        with self.assertRaises(ValueError):
             _ = ConfigToTestWith(
                 file_name='test_no_pw.ini',
                 start_path=self.get_test_files_path()

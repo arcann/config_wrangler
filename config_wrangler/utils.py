@@ -109,7 +109,7 @@ def resolve_variable(root_config_data: MutableMapping, variable_name: str, part_
 
 _interpolation_re = re.compile(r"\${([^}]+)}")
 
-def interpolate_value(value: str, root_config_data: MutableMapping) -> str:
+def interpolate_value(*, value: str, container: MutableMapping, root_config_data: MutableMapping) -> str:
     """
     Throws: ValueError if value can not be interpolated
     """
@@ -146,10 +146,18 @@ def interpolate_value(value: str, root_config_data: MutableMapping) -> str:
                                 variable_name,
                                 part_delimiter=part_delimiter,
                             )
-                        except ValueError as e:
-                            ValueError(f"<<{e} resolving {variable_name}>>")
+                        except ValueError as e1:
+                            try:
+                                variable_replacement = resolve_variable(
+                                    container,
+                                    variable_name,
+                                    part_delimiter=part_delimiter,
+                                )
+                            except ValueError as e2:
+                                ValueError(f"<<{e1} resolving {variable_name}>>")
                     else:
                         try:
+                            # Search in the local container instead of the root
                             # Change to case-insensitive dict
                             search_container = Dicti(container)
                             variable_replacement = search_container[variable_name]
@@ -210,11 +218,11 @@ def interpolate_values(
 
     for attr, value in value_tuples:
         if isinstance(value, MutableMapping) or isinstance(value, BaseModel) or isinstance(value, list) or isinstance(value, tuple):
-            sub_errors = interpolate_values(value, root_config_data=root_config_data, breadcrumbs=breadcrumbs + [attr])
+            sub_errors = interpolate_values(container=value, root_config_data=root_config_data, breadcrumbs=breadcrumbs + [attr])
             errors.extend(sub_errors)
         elif isinstance(value, str):
             try:
-                new_value = interpolate_value(value, root_config_data=root_config_data)
+                new_value = interpolate_value(value=value, container=container, root_config_data=root_config_data)
                 if new_value != value:
                     if mode == ContainerType.Mapping:
                         container[attr] = new_value
@@ -226,7 +234,7 @@ def interpolate_values(
                         )
                     else: # Model
                         setattr(container, attr, new_value)
-            except InterpolationError as e:
+            except ValueError as e:
                 errors.append(('.'.join(breadcrumbs), str(e)))
     return errors
 
