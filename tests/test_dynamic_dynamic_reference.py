@@ -1,6 +1,9 @@
 import unittest
 from typing import List, Dict
 
+from pydantic import Field
+from typing_extensions import Annotated
+
 from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.delimited_field import DelimitedListField
@@ -21,6 +24,7 @@ class TestReferenceSection(ConfigHierarchy):
     list_of_products_c: List[Product] = DelimitedListField()
     list_of_products_nl: List[Product] = DelimitedListField(delimiter='\n')
     dict_of_products: Dict[str, Product]
+    list_of_str: Annotated[List[str], Field(default_factory=list)]
 
 
 class TestDynamicConfig(ConfigFromIniEnv):
@@ -43,6 +47,11 @@ class TestDynamicDynamicRef(unittest.TestCase, Base_Tests_Mixin):
         # Note: This style does not work with single item values
         #       (although it can be a list of one value)
         #       So this test skips testing single_product
+
+        self.assertEqual(3, len(config_sec.list_of_str))
+        self.assertIn('one', config_sec.list_of_str)
+        self.assertIn('two', config_sec.list_of_str)
+        self.assertIn('three', config_sec.list_of_str)
 
         for list_of_products in [
             config_sec.list_of_products_c,

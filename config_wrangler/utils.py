@@ -4,6 +4,7 @@ import logging
 import re
 import types
 from datetime import timezone, datetime
+from enum import Enum, auto
 from typing import *
 
 from pydantic import BaseModel, ValidationError
@@ -109,6 +110,9 @@ def resolve_variable(root_config_data: MutableMapping, variable_name: str, part_
 _interpolation_re = re.compile(r"\${([^}]+)}")
 
 def interpolate_value(value: str, root_config_data: MutableMapping) -> str:
+    """
+    Throws: ValueError if value can not be interpolated
+    """
     if '$' not in value:
         return value
     else:
@@ -143,14 +147,14 @@ def interpolate_value(value: str, root_config_data: MutableMapping) -> str:
                                 part_delimiter=part_delimiter,
                             )
                         except ValueError as e:
-                            errors.append((section, str(e),))
+                            ValueError(f"<<{e} resolving {variable_name}>>")
                     else:
                         try:
                             # Change to case-insensitive dict
                             search_container = Dicti(container)
                             variable_replacement = search_container[variable_name]
                         except KeyError:
-                            errors.append((section, f"<<{variable_name} NOT FOUND>>",))
+                            raise ValueError(f"<<{variable_name} NOT FOUND>>",)
 
                     result_values.append(new_value[next_start:var_start])
                     result_values.append(variable_replacement)
@@ -176,30 +180,54 @@ def interpolate_value(value: str, root_config_data: MutableMapping) -> str:
                         )
         return new_value
 
-def interpolate_values(container: Union[MutableMapping,BaseModel], root_config_data: MutableMapping) -> List[Tuple[str, str]]:
+class ContainerType(Enum):
+    Mapping = auto()
+    List = auto()
+    Tuple = auto()
+    Model = auto()
+
+
+def interpolate_values(
+        container: Union[MutableMapping,List,BaseModel],
+        root_config_data: MutableMapping,
+        breadcrumbs: List[str] = None,
+) -> List[Tuple[str, str]]:
     errors = []
+    if breadcrumbs is None:
+        breadcrumbs = []
     if isinstance(container, MutableMapping):
-        mapping_mode = True
+        mode = ContainerType.Mapping
         value_tuples = container.items()
+    elif isinstance(container, list):
+        mode = ContainerType.List
+        value_tuples = list(enumerate(container))
+    elif isinstance(container, tuple):
+        mode = ContainerType.Tuple
+        value_tuples = list(enumerate(container))
     else:
-        mapping_mode = False
+        mode = ContainerType.Model
         value_tuples = list(container)
 
     for attr, value in value_tuples:
-        if isinstance(value, MutableMapping) or isinstance(value, BaseModel):
-            sub_errors = interpolate_values(value, root_config_data=root_config_data)
+        if isinstance(value, MutableMapping) or isinstance(value, BaseModel) or isinstance(value, list) or isinstance(value, tuple):
+            sub_errors = interpolate_values(value, root_config_data=root_config_data, breadcrumbs=breadcrumbs + [attr])
             errors.extend(sub_errors)
-        elif isinstance(value, list) or isinstance(value, tuple):
-            for sub_value in value:
-                sub_errors = interpolate_values(sub_value, root_config_data=root_config_data)
-                errors.extend(sub_errors)
         elif isinstance(value, str):
-            new_value = interpolate_value(value, root_config_data=root_config_data)
-            if new_value != value:
-                if mapping_mode:
-                    container[attr] = new_value
-                else:
-                    setattr(container, attr, new_value)
+            try:
+                new_value = interpolate_value(value, root_config_data=root_config_data)
+                if new_value != value:
+                    if mode == ContainerType.Mapping:
+                        container[attr] = new_value
+                    elif mode == ContainerType.List:
+                        container[attr] = new_value
+                    elif mode == ContainerType.Tuple:
+                        raise ValueError(
+                            f"Can't interpolate {value} inside tuple to {new_value}. Make it a list! See {breadcrumbs}"
+                        )
+                    else: # Model
+                        setattr(container, attr, new_value)
+            except InterpolationError as e:
+                errors.append(('.'.join(breadcrumbs), str(e)))
     return errors
 
 def parse_as_literal_or_json(value: str) -> Any:
