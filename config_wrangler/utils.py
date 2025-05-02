@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import types
+import warnings
 from datetime import timezone, datetime
 from enum import Enum, auto
 from typing import *
@@ -194,6 +195,22 @@ class ContainerType(Enum):
     Tuple = auto()
     Model = auto()
 
+def set_container_value(
+        container_type: ContainerType,
+        container: Union[MutableMapping,List,BaseModel],
+        attr: Union[str, int],
+        value: Any
+):
+    if container_type == ContainerType.Mapping:
+        container[attr] = value
+    elif container_type == ContainerType.List:
+        container[attr] = value
+    elif container_type == ContainerType.Tuple:
+        raise ValueError(
+            f"Can't interpolate {value} inside tuple. Make it a list! See {breadcrumbs}"
+        )
+    else: # Model
+        setattr(container, attr, value)
 
 def interpolate_values(
         container: Union[MutableMapping,List,BaseModel],
@@ -204,36 +221,45 @@ def interpolate_values(
     if breadcrumbs is None:
         breadcrumbs = []
     if isinstance(container, MutableMapping):
-        mode = ContainerType.Mapping
+        container_type = ContainerType.Mapping
         value_tuples = container.items()
     elif isinstance(container, list):
-        mode = ContainerType.List
+        container_type = ContainerType.List
         value_tuples = list(enumerate(container))
     elif isinstance(container, tuple):
-        mode = ContainerType.Tuple
-        value_tuples = list(enumerate(container))
+        # We can't update the tuple so interpolation won't work
+        # Howver, caller should change it to a list
+        raise ValueError(
+            f"Can't interpolate {value} inside tuple to {new_value}. Make it a list! See {breadcrumbs}"
+        )
     else:
-        mode = ContainerType.Model
+        container_type = ContainerType.Model
         value_tuples = list(container)
 
     for attr, value in value_tuples:
         if isinstance(value, MutableMapping) or isinstance(value, BaseModel) or isinstance(value, list) or isinstance(value, tuple):
+            if isinstance(value, tuple):
+                warnings.warn(f"Value of {attr} changed from tuple to list")
+                # Convert to a list
+                value = list(value)
+                set_container_value(
+                    container_type=container_type,
+                    container=container,
+                    attr=attr,
+                    value=value,
+                )
             sub_errors = interpolate_values(container=value, root_config_data=root_config_data, breadcrumbs=breadcrumbs + [attr])
             errors.extend(sub_errors)
         elif isinstance(value, str):
             try:
                 new_value = interpolate_value(value=value, container=container, root_config_data=root_config_data)
                 if new_value != value:
-                    if mode == ContainerType.Mapping:
-                        container[attr] = new_value
-                    elif mode == ContainerType.List:
-                        container[attr] = new_value
-                    elif mode == ContainerType.Tuple:
-                        raise ValueError(
-                            f"Can't interpolate {value} inside tuple to {new_value}. Make it a list! See {breadcrumbs}"
-                        )
-                    else: # Model
-                        setattr(container, attr, new_value)
+                    set_container_value(
+                        container_type=container_type,
+                        container=container,
+                        value=new_value,
+                        attr=attr,
+                    )
             except ValueError as e:
                 errors.append(('.'.join(breadcrumbs), str(e)))
     return errors

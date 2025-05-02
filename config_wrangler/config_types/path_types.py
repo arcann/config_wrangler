@@ -11,7 +11,7 @@ DirectoryPath = DirectoryPath
 FilePath = FilePath
 
 
-def _path_validator(value: Any) -> Path:
+def _path_validator(value: Any) -> Path | None:
     if value is None:
         return None
     return Path(value)
@@ -23,6 +23,7 @@ def _file_validator(p: Path) -> Path:
     if not p.is_file():
         raise ValueError(f"{p} is not a file")
     return p
+
 
 def _writable_file_validator(p: Path) -> Path:
     if p is None:
@@ -50,7 +51,7 @@ def _directory_validator(p: Path) -> Path:
     return p
 
 
-def _expand_user_validator(p: Path) -> Path:
+def _expand_user_validator(p: Path | None) -> Path | None:
     if p is None:
         return None
     return p.expanduser()
