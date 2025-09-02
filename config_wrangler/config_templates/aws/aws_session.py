@@ -24,6 +24,7 @@ else:
 #       (Help > Edit Custom Properties), then restart.
 
 from config_wrangler.config_templates.credentials import Credentials
+from config_wrangler.config_templates.credentials import PasswordSource
 
 
 # AWSSession does not look right, so we added underscores
@@ -45,7 +46,7 @@ class AWS_Session(Credentials):
                 args = dict()
                 if self.region_name is not None:
                     args['region_name'] = self.region_name
-                self._session =  boto3.session.Session(
+                self._session = boto3.session.Session(
                     **args
                 )
                 if self.iam_role is not None:
@@ -188,7 +189,7 @@ class AWS_Session(Credentials):
         )
 
     def get_request_v4_authorizer(self, service: str = None) -> 'requests.auth.AuthBase':
-        from requests_aws4auth  import AWS4Auth
+        from requests_aws4auth import AWS4Auth
         if service is None:
             service = self._service
         return AWS4Auth(

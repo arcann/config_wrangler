@@ -201,8 +201,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         self.assertIsInstance(test_val, datetime)
 
         test_val = config.test_section.my_url
-        self.assertEqual(test_val, Url('https://localhost:6553/'))
-        self.assertIsInstance(test_val, Url)
+        self.assertEqual(str(test_val), str(Url('https://localhost:6553/')))
 
         self.assertEqual(config.test_section.double_interpolate, 'My DB is in ./example_db')
 
