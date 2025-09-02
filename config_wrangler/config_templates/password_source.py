@@ -9,6 +9,7 @@ class PasswordSource(StrEnum):
     ENVIRONMENT = auto()
     KEYRING = auto()
     KEEPASS = auto()
+    AWS_ASSUME_ROLE = auto()
 
 
 def _check_password_source(value: Any) -> PasswordSource:

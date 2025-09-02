@@ -32,17 +32,30 @@ class AWS_Session(Credentials):
     # sso_session: Optional[DynamicallyReferenced] = None
     region_name: Optional[str] = None
 
+    iam_role: Optional[str] = None
+
     _session: boto3.session.Session = PrivateAttr(default=None)
     _service: str = PrivateAttr(default=None)
 
     @property
     def session(self) -> boto3.session.Session:
         if self._session is None:
-            self._session = boto3.session.Session(
-                aws_access_key_id=self.user_id,
-                aws_secret_access_key=self.get_password(),
-                region_name=self.region_name,
-            )
+            if self.password_source == PasswordSource.AWS_ASSUME_ROLE:
+                # Inherit role / credentials from the current environment
+                args = dict()
+                if self.region_name is not None:
+                    args['region_name'] = self.region_name
+                self._session =  boto3.session.Session(
+                    **args
+                )
+                if self.iam_role is not None:
+                    self.assume_role()
+            else:
+                self._session = boto3.session.Session(
+                    aws_access_key_id=self.user_id,
+                    aws_secret_access_key=self.get_password(),
+                    region_name=self.region_name,
+                )
         return self._session
 
     def set_session(self, session: boto3.session.Session):
@@ -65,7 +78,7 @@ class AWS_Session(Credentials):
     def get_service_client(self, service: str):
         return self._get_client(service=service)
 
-    def sts_assume_role(
+    def _sts_assume_role(
             self,
             role_arn: str,
             role_session_name: str,
@@ -102,10 +115,12 @@ class AWS_Session(Credentials):
             aws_session_token=response['Credentials']['SessionToken']
         )
 
-        # Should we have this new session become the default?
-        self._session = session
-
         return session
+
+    def assume_role(self):
+        self._session = self._sts_assume_role(
+            role_arn=self.iam_role,
+        )
 
     def _get_resource(self, service: str = None):
         if service is None:

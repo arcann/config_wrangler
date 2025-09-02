@@ -235,6 +235,9 @@ class Credentials(ConfigHierarchy):
                 password, search_info = self._get_password_environment()
             elif self.password_source == PasswordSource.KEEPASS:
                 password, search_info = self._get_password_keepass()
+            elif self.password_source == PasswordSource.AWS_ASSUME_ROLE:
+                password = 'NOT A REAL PASSWORD'
+                password_source = 'Assume Role'
             else:
                 raise ValueError(f"invalid password_source")
         except Exception as e:
@@ -249,7 +252,8 @@ class Credentials(ConfigHierarchy):
     def check_model(self):
         user_id = self.user_id
         if user_id == '' or user_id is None:
-            raise ValueError("user_id not provided")
+            if self.password_source != PasswordSource.AWS_ASSUME_ROLE:
+                raise ValueError("user_id not provided")
 
         if self.password_source == PasswordSource.KEYRING:
             keyring_section = self.keyring_section
