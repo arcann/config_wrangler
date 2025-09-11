@@ -1,4 +1,3 @@
-import inspect
 from collections import defaultdict
 from types import MethodType
 from typing import Set
