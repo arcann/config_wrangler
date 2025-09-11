@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import model_validator, PrivateAttr
 
+from config_wrangler.config_templates.password_source import PasswordSource
+
 try:
     # noinspection PyPackageRequirements
     from sqlalchemy.engine import Engine
@@ -236,6 +238,9 @@ class SQLAlchemyDatabase(Credentials):
             # Bypass password checks
             return self
         else:
+            if self.use_get_cluster_credentials:
+                if self.rs_cluster_id is None:
+                    raise ValueError("rs_cluster_id required when use_get_cluster_credentials is True")
             # noinspection PyCallingNonCallable
             return Credentials.check_model(self)
 
@@ -257,13 +262,24 @@ class SQLAlchemyDatabase(Credentials):
         if self._rs_client is None:
             import boto3
 
-            self._rs_client = boto3.client(
-                'redshift',
-                region_name=self.rs_region_name,
-                aws_access_key_id=self.aws_access_key_id,
-                aws_secret_access_key=self.aws_secret_access_key,
-                aws_session_token=None,
-            )
+            if self.password_source == PasswordSource.AWS_ASSUME_ROLE:
+                from config_wrangler.config_templates.aws.aws_session import AWS_Session
+                rs_session = AWS_Session(
+                    region_name=self.rs_region_name,
+                    password_source=self.password_source,
+                )
+                self._rs_client = rs_session.session.client(
+                    'redshift',
+                    region_name=self.rs_region_name,
+                )
+            else:
+                self._rs_client = boto3.client(
+                    'redshift',
+                    region_name=self.rs_region_name,
+                    aws_access_key_id=self.aws_access_key_id,
+                    aws_secret_access_key=self.aws_secret_access_key,
+                    aws_session_token=None,
+                )
 
         # Send optional params to get_cluster_credentials only if they have real values
         extra_get_cluster_credentials_args = dict()
@@ -304,10 +320,11 @@ class SQLAlchemyDatabase(Credentials):
     def get_uri(self) -> URL:
         user_id = self.user_id
         if self.use_get_cluster_credentials:
-            if self.aws_access_key_id is None:
-                self.aws_access_key_id = self.user_id
-            if self.aws_secret_access_key is None:
-                self.aws_secret_access_key = self.get_password()
+            if self.password_source != PasswordSource.AWS_ASSUME_ROLE:
+                if self.aws_access_key_id is None:
+                    self.aws_access_key_id = self.user_id
+                if self.aws_secret_access_key is None:
+                    self.aws_secret_access_key = self.get_password()
 
             if self.rs_db_user_id is None:
                 raise ValueError(

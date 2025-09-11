@@ -263,6 +263,8 @@ class Credentials(ConfigHierarchy):
             password = self.raw_password
             if password is None or password == '':
                 raise ValueError(f"{self} password_source is Config but password is not set")
+        # elif self.password_source == PasswordSource.KEEPASS:
+        # TODO: Need to check _get_keepass_config_sub_section() and local model for keepass_group
         return self
 
     @config_hierarchy_validator

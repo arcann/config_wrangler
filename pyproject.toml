@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "config_wrangler"
-version = "1.3.0"
+version = "1.3.1"
 license = "MIT"
 authors = ["Derek Wood"]
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
@@ -44,6 +44,7 @@ keyring = ["keyring"]
 tox = "^4.6"
 pytest = ">=8.2"
 requests-mock = "^1.12.1"
+toml = ">=0.10.2"
 
 [tool.poetry.group.dev.dependencies.moto]
 # Optional but required for tests so needed for development

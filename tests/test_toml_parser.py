@@ -34,6 +34,12 @@ class ConfigWithBadKeypass(ConfigToTestWith):
 
 class TestTomlParser(TestIniParser):
 
+    def setUp(self) -> None:
+        try:
+            import toml
+        except ImportError:
+            self.skipTest("Extra toml not installed")
+
     def get_test_files_path(self):
         return self.get_package_path() / 'test_config_files_toml'
 

@@ -551,6 +551,14 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         print(raises_ex.exception.response)
         self.assertEqual(raises_ex.exception.response['Error']['Code'], "404")
 
+    def test_assume_role(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            password_source=PasswordSource.AWS_ASSUME_ROLE,
+        )
+        file = bucket / self.example1_key
+        self.assertTrue(file.is_file())
+
     @set_initial_no_auth_action_count(0)
     def test_download_auth_error(self):
         bucket = S3_Bucket(
