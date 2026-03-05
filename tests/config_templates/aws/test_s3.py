@@ -472,10 +472,11 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             tmp_path = Path(tmp)
             download_path = tmp_path / 'sub'
 
-            bucket.download_files(
+            file_list = bucket.download_files(
                 local_path=str(download_path),
                 key='folder1',
             )
+            self.assertEqual(len(file_list), 2)
             self._assert_files_equal(self.file1_path, download_path / 'file.txt')
             self._assert_files_equal(self.file1_path, download_path / 'file2.txt')
 
@@ -493,6 +494,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
 
             (bucket / 'folder').download_files(
                 local_path=str(download_path),
+                treat_as_folder=False,
             )
             self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file.txt')
             self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file2.txt')
@@ -510,9 +512,10 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             tmp_path = Path(tmp)
             download_path = tmp_path / 'sub1'
 
-            bucket.download_files(
+            file_list = bucket.download_files(
                 local_path=str(download_path),
             )
+            self.assertEqual(len(file_list), 4)
             self._assert_files_equal(self.file1_path, download_path / self.example1_key)
             self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file.txt')
             self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file2.txt')

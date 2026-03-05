@@ -71,6 +71,7 @@ class S3ClientError(ClientError):
 class S3_Bucket(AWS_Session):
     bucket_name: str
     key: Optional[str] = None
+    treat_as_folder: bool = False
 
     _service: str = PrivateAttr(default='s3')
 
@@ -141,7 +142,8 @@ class S3_Bucket(AWS_Session):
 
     @staticmethod
     def _non_blank_key(key: str):
-        if key is None or str(key).strip() == '':
+        key_str = str(key).strip()
+        if key is None or key_str in {''}:
             return False
         else:
             return True
@@ -391,6 +393,7 @@ class S3_Bucket(AWS_Session):
             *,
             local_path: Union[str, Path],
             key: Optional[Union[str, PurePosixPath]] = None,
+            treat_as_folder: bool = None,
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
             create_parents: bool = True,
@@ -398,7 +401,7 @@ class S3_Bucket(AWS_Session):
     ) -> Iterable[Path]:
         if self._non_blank_key(key):
             file_obj = self / key
-            file_obj.download_files(
+            return file_obj.download_files(
                 local_path=local_path,
                 extra_args=extra_args,
                 transfer_config=transfer_config,
@@ -413,7 +416,7 @@ class S3_Bucket(AWS_Session):
             results = list()
             full_key = self._get_key()
             base_path = PurePosixPath(full_key)
-            for s3_object in self.list_objects():
+            for s3_object in self.list_objects(treat_as_folder=treat_as_folder):
                 s3_object_path = PurePosixPath(s3_object.key)
                 try:
                     relative_key = s3_object_path.relative_to(base_path)
@@ -496,8 +499,17 @@ class S3_Bucket(AWS_Session):
         )
         self.delete(key, version_id=version_id)
 
-    def list_objects(self, key: Optional[Union[str, PurePosixPath]] = None, ) -> 'BucketObjectsCollection':
+    def list_objects(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            treat_as_folder: bool = None,
+    ) -> 'BucketObjectsCollection':
         key = self._get_key(key)
+        if treat_as_folder is None:
+            treat_as_folder = self.treat_as_folder
+        if treat_as_folder:
+            if key != '' and not key.endswith('/'):
+                key = f"{key}/"
         try:
             collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=key)
         except ClientError as ex:
@@ -515,11 +527,19 @@ class S3_Bucket(AWS_Session):
         )
         return self.list_objects(key=key)
 
-    def list_object_keys(self, key: Optional[Union[str, PurePosixPath]] = None) -> List[str]:
-        obj_collection = self.list_objects(key)
+    def list_object_keys(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            treat_as_folder: bool = None,
+    ) -> List[str]:
+        obj_collection = self.list_objects(key,treat_as_folder=treat_as_folder)
         return [obj.key for obj in obj_collection]
 
-    def list_object_paths(self, key: Optional[Union[str, PurePosixPath]] = None) -> List[PurePosixPath]:
+    def list_object_paths(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            treat_as_folder: bool = None,
+    ) -> List[PurePosixPath]:
         """
         Return the relative paths of objects contained in the in/under this object
         or, if provided, under the object + provided key parameter.
@@ -527,14 +547,17 @@ class S3_Bucket(AWS_Session):
 
         """
         resolved_key = self._get_key(key)
-        return [PurePosixPath(obj_key).relative_to(resolved_key) for obj_key in self.list_object_keys(key)]
+        return [
+            PurePosixPath(obj_key).relative_to(resolved_key)
+            for obj_key in self.list_object_keys(key, treat_as_folder=treat_as_folder)
+        ]
 
     # noinspection SpellCheckingInspection
     def iterdir(self) -> Iterable['S3_Bucket_Key']:
         """
         Return the S3_Bucket_Key objects contained in the in/under this object.
         """
-        return [self / key for key in self.list_object_paths()]
+        return [self / key for key in self.list_object_paths(treat_as_folder=True)]
 
     @staticmethod
     def _path_to_key(path: PurePosixPath):
@@ -612,7 +635,7 @@ class S3_Bucket(AWS_Session):
                 return False
             raise
 
-    # Note: There is no really useful & consistent way to implement id_dir on S3
+    # Note: There is no really useful & consistent way to implement is_dir on S3
     # A good investigation related to this is here:
     # https://www.tecracer.com/blog/2023/01/what-are-the-folders-in-the-s3-console.html
 
@@ -620,7 +643,7 @@ class S3_Bucket(AWS_Session):
             self, other: Union[str, PurePath]
     ) -> 'S3_Bucket_Key':
         key = self._get_key(other)
-        return self._build_s3_bucket_key(key)
+        return self._build_s3_bucket_key(key, treat_as_folder=True)
 
     # noinspection SpellCheckingInspection
     def joinpath(
@@ -657,8 +680,15 @@ class S3_Bucket(AWS_Session):
                 file_name=str(file_name)
             )
 
-    def _build_s3_bucket_key(self, key: Union[str, Path]):
-        return self._factory(S3_Bucket_Key, key=str(key), exclude={'folder', 'file_name'})
+    def _build_s3_bucket_key(
+            self,
+            key: Union[str, Path],
+            treat_as_folder: bool = None,
+    ):
+        s3_key_obj =  self._factory(S3_Bucket_Key, key=str(key), exclude={'folder', 'file_name'})
+        if treat_as_folder is not None:
+            s3_key_obj.treat_as_folder = treat_as_folder
+        return s3_key_obj
 
 
 # noinspection PyPep8Naming
@@ -724,6 +754,7 @@ class S3_Bucket_Folder(S3_Bucket):
         Represents a folder within an S3 bucket.
     """
     folder: str
+    treat_as_folder: bool = True
 
     # Note the order of decorators matters!
     # noinspection PyMethodParameters,PyNestedDecorators
@@ -737,9 +768,14 @@ class S3_Bucket_Folder(S3_Bucket):
             raise ValueError(f"Zero length string not a valid folder")
         return v
 
+    # TODO: A folder and a key are not the same.  Folders should always send a trailing slash to S3
+
     def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
         if self._non_blank_key(extra_key):
-            return str(PurePosixPath(self.folder) / extra_key)
+            if self.folder == '/':
+                return extra_key
+            else:
+                return str(PurePosixPath(self.folder) / extra_key)
         else:
             return self.folder
 
@@ -801,6 +837,7 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
         Similar to S3_Bucket_Key but uses folder + file_name instead of a single key.
     """
     file_name: str
+    treat_as_folder: bool = False
 
     # Note the order of decorators matters!
     # noinspection PyNestedDecorators
