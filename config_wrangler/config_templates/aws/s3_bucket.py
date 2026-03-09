@@ -504,12 +504,19 @@ class S3_Bucket(AWS_Session):
             key: Optional[Union[str, PurePosixPath]] = None,
             treat_as_folder: bool = None,
     ) -> 'BucketObjectsCollection':
+        log = logging.getLogger(f"{__name__}.list_objects")
+        if treat_as_folder is None and key is not None:
+            # If directly provided a key string, use it as is
+            treat_as_folder = False
+            log.debug(f"Using provided key {key}, defaulting treat_as_folder = False")
         key = self._get_key(key)
         if treat_as_folder is None:
+            log.debug(f"Defaulting treat_as_folder to setting value {self.treat_as_folder}")
             treat_as_folder = self.treat_as_folder
         if treat_as_folder:
             if key != '' and not key.endswith('/'):
                 key = f"{key}/"
+                log.debug(f"treat_as_folder True, adding / to the end = {key}")
         try:
             collection = self.resource.Bucket(self.bucket_name).objects.filter(Prefix=key)
         except ClientError as ex:
