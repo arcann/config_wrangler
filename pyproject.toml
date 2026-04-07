@@ -44,8 +44,8 @@ Documentation = "https://bietl.dev/config_wrangler/"
 
 [dependency-groups]
 dev = [
-    "tox>=4.6,<5",
-    "tox-uv>=1.29.0",
+    "tox>=4.49",
+    "tox-uv-bare>=1.29.0",
     "pytest>=8.2",
     "requests-mock>=1.12.1,<2",
     "toml>=0.10.2",
@@ -64,6 +64,7 @@ docs = [
 
 [tool.uv]
 default-groups = ["dev"]
+exclude-newer = "1 week"
 
 [tool.uv.build-backend]
 module-root = ""
