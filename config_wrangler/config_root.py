@@ -87,7 +87,9 @@ class ConfigRoot(ConfigHierarchy):
             log.debug(f"fill_hierarchy on {name}")
         except AttributeError as e:
             log.warning(f"{parents} {repr(model_level)} is not an instance inheriting from ConfigHierarchy: {e}")
-        for attr_name, attr_value in model_level.__dict__.items():
+        # noinspection PyTypeChecker
+        for attr_name in model_level.__class__.model_fields:
+            attr_value = getattr(model_level, attr_name)
             self.fill_hierarchy_any_type(
                 value=attr_value,
                 parents=parents + [attr_name],
@@ -97,7 +99,8 @@ class ConfigRoot(ConfigHierarchy):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                method_list = inspect.getmembers(model_level, predicate=inspect.ismethod)
+                # Note: getmembers_static avoids calling property methods like getmembers does
+                method_list = inspect.getmembers_static(model_level, predicate=inspect.ismethod)
             except Exception:
                 method_list = []
         for validation_method_name, validation_method in method_list:
