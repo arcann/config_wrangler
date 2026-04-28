@@ -11,7 +11,7 @@ from botocore.exceptions import ClientError
 from moto import mock_aws
 from moto.core import set_initial_no_auth_action_count
 
-from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Folder
+from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Folder, S3_Bucket_Key
 from config_wrangler.config_templates.credentials import PasswordSource
 from tests.base_tests_mixin import Base_Tests_Mixin
 
@@ -125,41 +125,57 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         self.assertEqual(bucket3.get_bucket_region(), self.bucket3_region)
 
     def test_list_bucket_paths(self):
-        bucket = S3_Bucket(
-            bucket_name=self.bucket1_name,
-            user_id='mock_user',
-            password_source=PasswordSource.CONFIG_FILE,
-            raw_password='super secret password',
-        )
+        roots = [
+            S3_Bucket(
+                bucket_name=self.bucket1_name,
+                user_id='mock_user',
+                password_source=PasswordSource.CONFIG_FILE,
+                raw_password='super secret password',
+            ),
+            S3_Bucket_Folder(
+                bucket_name=self.bucket1_name,
+                user_id='mock_user',
+                password_source=PasswordSource.CONFIG_FILE,
+                raw_password='super secret password',
+                folder='',
+            ),
+            S3_Bucket_Folder(
+                bucket_name=self.bucket1_name,
+                user_id='mock_user',
+                password_source=PasswordSource.CONFIG_FILE,
+                raw_password='super secret password',
+                folder='/',
+            ),
+            S3_Bucket_Folder(
+                bucket_name=self.bucket1_name,
+                user_id='mock_user',
+                password_source=PasswordSource.CONFIG_FILE,
+                raw_password='super secret password',
+                folder='//',
+            ),
+            S3_Bucket_Key(
+                bucket_name=self.bucket1_name,
+                key='',
+                user_id='mock_user',
+                raw_password='super secret password',
+                password_source=PasswordSource.CONFIG_FILE,
+            )
+        ]
+
         expected = {
             PurePosixPath('test_good.ini'),
             PurePosixPath('folder1/file.txt'),
             PurePosixPath('folder1/file2.txt'),
             PurePosixPath('folder2/file3.txt'),
         }
-        actual = set(bucket.list_object_paths())
-        self.assertEqual(expected, actual)
-        for filename in expected:
-            s3_file = bucket / filename
-            self.assertTrue(s3_file.exists())
 
-    def test_list_folder_paths(self):
-        folder = S3_Bucket_Folder(
-            bucket_name=self.bucket1_name,
-            folder='folder1',
-            user_id='mock_user',
-            password_source=PasswordSource.CONFIG_FILE,
-            raw_password='super secret password',
-        )
-        expected = {
-            PurePosixPath('file.txt'),
-            PurePosixPath('file2.txt'),
-        }
-        actual = set(folder.list_object_paths())
-        self.assertEqual(expected, actual)
-        for filename in expected:
-            s3_file = folder / filename
-            self.assertTrue(s3_file.exists())
+        for root in roots:
+            print(f"Testing with root {root}")
+            actual = set(root.list_object_paths())
+            self.assertEqual(expected, actual)
+            for filename in expected:
+                s3_file = root / filename
+                self.assertTrue(s3_file.exists())
 
     def test_list_folder_iter(self):
         folder = S3_Bucket_Folder(
@@ -254,6 +270,19 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         self.assertEqual(bucket.get_password(), folder_key.get_password())
         self.assertTrue(folder_key.session is session)
 
+        folder_key2 = bucket / '' / 'folder1'
+        self.assertEqual("folder1", str(folder_key2.key))
+
+        bucket_folder_root = S3_Bucket_Folder(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            password_source=PasswordSource.CONFIG_FILE,
+            raw_password='super secret password',
+            folder='/',
+        )
+        folder_key3 = bucket_folder_root / 'folder1'
+        self.assertEqual("folder1", str(folder_key3.key))
+
         file_key = folder_key / 'file.txt'
         self.assertEqual("folder1/file.txt", str(file_key.key))
         self.assertEqual(bucket.bucket_name, file_key.bucket_name)
@@ -262,34 +291,55 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         self.assertTrue(file_key.session is session)
 
     def test_nav_to_folder(self):
-        bucket = S3_Bucket(
-            bucket_name=self.bucket1_name,
-            user_id='mock_user',
-            raw_password='super secret password',
-            password_source=PasswordSource.CONFIG_FILE,
-        )
-        session = bucket.session
+        roots = [
+            S3_Bucket(
+                bucket_name=self.bucket1_name,
+                user_id='mock_user',
+                raw_password='super secret password',
+                password_source=PasswordSource.CONFIG_FILE,
+            ),
+            S3_Bucket_Folder(
+                bucket_name=self.bucket1_name,
+                user_id='mock_user',
+                password_source=PasswordSource.CONFIG_FILE,
+                raw_password='super secret password',
+                folder='/',
+            ),
+            S3_Bucket_Key(
+                bucket_name=self.bucket1_name,
+                key='',
+                user_id='mock_user',
+                raw_password='super secret password',
+                password_source=PasswordSource.CONFIG_FILE,
+            ),
+        ]
 
-        folder_key = bucket / 'folder1'
-        self.assertEqual('folder1', str(folder_key.key))
-        self.assertEqual(bucket.bucket_name, folder_key.bucket_name)
-        self.assertEqual(bucket.user_id, folder_key.user_id)
-        self.assertEqual(bucket.get_password(), folder_key.get_password())
-        self.assertTrue(folder_key.session is session)
+        for root in roots:
+            session = root.session
+            print(f"Testing with root {root}")
+            folder_key = root / 'folder1'
+            self.assertEqual('folder1', str(folder_key.key))
+            self.assertEqual(root.bucket_name, folder_key.bucket_name)
+            self.assertEqual(root.user_id, folder_key.user_id)
+            self.assertEqual(root.get_password(), folder_key.get_password())
+            # Test that session is inherited
+            self.assertTrue(folder_key.session is session)
 
-        folder_key2 = folder_key / 'folder2'
-        self.assertEqual('folder1/folder2', folder_key2.key)
-        self.assertEqual(bucket.bucket_name, folder_key2.bucket_name)
-        self.assertEqual(bucket.user_id, folder_key2.user_id)
-        self.assertEqual(bucket.get_password(), folder_key2.get_password())
-        self.assertTrue(folder_key2.session is session)
+            folder_key2 = folder_key / 'folder2'
+            self.assertEqual('folder1/folder2', folder_key2.key)
+            self.assertEqual(root.bucket_name, folder_key2.bucket_name)
+            self.assertEqual(root.user_id, folder_key2.user_id)
+            self.assertEqual(root.get_password(), folder_key2.get_password())
+            # Test that session is inherited
+            self.assertTrue(folder_key2.session is session)
 
-        folder_key3 = folder_key / 'folder3'
-        self.assertEqual("folder1/folder3", str(folder_key3.key))
-        self.assertEqual(bucket.bucket_name, folder_key3.bucket_name)
-        self.assertEqual(bucket.user_id, folder_key3.user_id)
-        self.assertEqual(bucket.get_password(), folder_key3.get_password())
-        self.assertTrue(folder_key3.session is session)
+            folder_key3 = folder_key / 'folder3'
+            self.assertEqual("folder1/folder3", str(folder_key3.key))
+            self.assertEqual(root.bucket_name, folder_key3.bucket_name)
+            self.assertEqual(root.user_id, folder_key3.user_id)
+            self.assertEqual(root.get_password(), folder_key3.get_password())
+            # Test that session is inherited
+            self.assertTrue(folder_key3.session is session)
 
     def test_join_path(self):
         bucket = S3_Bucket(
@@ -476,7 +526,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
                 local_path=str(download_path),
                 key='folder1',
             )
-            self.assertEqual(len(file_list), 2)
+            self.assertEqual(len(list(file_list)), 2)
             self._assert_files_equal(self.file1_path, download_path / 'file.txt')
             self._assert_files_equal(self.file1_path, download_path / 'file2.txt')
 
@@ -515,7 +565,7 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             file_list = bucket.download_files(
                 local_path=str(download_path),
             )
-            self.assertEqual(len(file_list), 4)
+            self.assertEqual(len(list(file_list)), 4)
             self._assert_files_equal(self.file1_path, download_path / self.example1_key)
             self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file.txt')
             self._assert_files_equal(self.file1_path, download_path / 'folder1' / 'file2.txt')
@@ -612,3 +662,11 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             self.assertIn('SignedHeaders=', mock_auth)
             self.assertIn('Signature=', mock_auth)
 
+    def test_bucket_key(self):
+        bucket_key_root1 = S3_Bucket_Key(
+            bucket_name=self.bucket1_name,
+            key='',
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )

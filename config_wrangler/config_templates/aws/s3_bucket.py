@@ -143,7 +143,7 @@ class S3_Bucket(AWS_Session):
     @staticmethod
     def _non_blank_key(key: str):
         key_str = str(key).strip()
-        if key is None or key_str in {''}:
+        if key is None or key_str in {'', '/'}:
             return False
         else:
             return True
@@ -154,7 +154,9 @@ class S3_Bucket(AWS_Session):
 
     def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
         if self._is_blank_key(extra_key):
-            if self._is_blank_key(self.key):
+            if self.key == '/':
+                key = ''
+            elif self._is_blank_key(self.key):
                 key = ''
             else:
                 key = self.key
@@ -513,6 +515,8 @@ class S3_Bucket(AWS_Session):
         if treat_as_folder is None:
             log.debug(f"Defaulting treat_as_folder to setting value {self.treat_as_folder}")
             treat_as_folder = self.treat_as_folder
+        if key == '/':
+            key = ''
         if treat_as_folder:
             if key != '' and not key.endswith('/'):
                 key = f"{key}/"
@@ -714,8 +718,6 @@ class S3_Bucket_Key(S3_Bucket):
         # Handle pathlib values
         if not isinstance(v, str):
             v = str(v)
-        if len(v) == 0:
-            raise ConfigError(f"Zero length string not a valid key")
         return v
 
     def upload_specified_file(
@@ -772,19 +774,16 @@ class S3_Bucket_Folder(S3_Bucket):
         if not isinstance(v, str):
             v = str(v)
         if len(v) == 0:
-            raise ValueError(f"Zero length string not a valid folder")
+            # Treat as root folder
+            v = '/'
         return v
 
-    # TODO: A folder and a key are not the same.  Folders should always send a trailing slash to S3
-
     def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
+        folder_key = self.folder.lstrip('/')
         if self._non_blank_key(extra_key):
-            if self.folder == '/':
-                return extra_key
-            else:
-                return str(PurePosixPath(self.folder) / extra_key)
+            return str(PurePosixPath(folder_key) / extra_key)
         else:
-            return self.folder
+            return folder_key
 
     def upload_folder_file(
             self,

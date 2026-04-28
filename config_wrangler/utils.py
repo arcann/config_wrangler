@@ -17,6 +17,28 @@ from config_wrangler.config_types.delimited_field import DelimitedListFieldInfo
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced, DynamicFieldInfo
 
 
+def is_union(cls):
+    origin = get_origin(cls)
+    # Check for both Union and the | operator (UnionType)
+    return origin is Union or origin is types.UnionType
+
+
+def get_union_type(cls):
+    base_type = None
+    for union_cls in get_args(cls):
+        if union_cls is None or union_cls is types.NoneType:
+            # Skip None part of a Union version of Optional. e.g. Union[A, None]
+            continue
+        elif base_type is None:
+            # If we have not already found a valid base type, set it
+            base_type = union_cls
+        else:
+            raise SyntaxError(f"{cls} has more than none non-None type option {get_args(cls)}")
+    if base_type is None:
+        raise SyntaxError(f"{cls} does not have a non-None type option")
+    return base_type
+
+
 # Moved here because  Pydantic V2 deprecated it
 def lenient_issubclass(
         cls: Any,
@@ -28,19 +50,18 @@ def lenient_issubclass(
 
         if isinstance(cls, type):
             return issubclass(cls, class_or_tuple)
-        else:
-            try:
-                origin = cls.__origin__
-            except AttributeError:
-                origin = get_origin(cls)
-            if origin is not None:
-                if origin == Union:
-                    for union_cls in get_args(cls):
-                        if lenient_issubclass(union_cls, class_or_tuple):
-                            return True
-                    return False
-                else:
-                    return issubclass(origin, class_or_tuple)
+
+        if is_union(cls):
+            union_type = get_union_type(cls)
+            return lenient_issubclass(union_type, class_or_tuple)
+
+        origin = get_origin(cls)
+        if origin is not None:
+            if is_union(origin):
+                return lenient_issubclass(origin, class_or_tuple)
+            else:
+                return issubclass(origin, class_or_tuple)
+        raise TypeError(f"Could not get origin type from {type(cls)} {cls}")
 
     except TypeError:
         if isinstance(cls, (types.GenericAlias, types.UnionType)):
@@ -49,12 +70,9 @@ def lenient_issubclass(
 
 
 def get_inner_type(cls: Any):
-    try:
-        origin = cls.__origin__
-    except AttributeError:
-        origin = get_origin(cls)
+    origin = get_origin(cls)
 
-    if origin == Union:
+    if is_union(cls):
         for inner_cls in get_args(cls):
             return get_inner_type(inner_cls)
     else:
@@ -109,6 +127,7 @@ def resolve_variable(root_config_data: MutableMapping, variable_name: str, part_
 
 
 _interpolation_re = re.compile(r"\${([^}]+)}")
+
 
 def interpolate_value(*, value: str, container: MutableMapping, root_config_data: MutableMapping) -> str:
     """
@@ -189,15 +208,17 @@ def interpolate_value(*, value: str, container: MutableMapping, root_config_data
                         )
         return new_value
 
+
 class ContainerType(Enum):
     Mapping = auto()
     List = auto()
     Tuple = auto()
     Model = auto()
 
+
 def set_container_value(
         container_type: ContainerType,
-        container: Union[MutableMapping,List,BaseModel],
+        container: Union[MutableMapping, List, BaseModel],
         attr: Union[str, int],
         value: Any
 ):
@@ -209,11 +230,12 @@ def set_container_value(
         raise ValueError(
             f"Can't interpolate {value} inside tuple. Make it a list! See {breadcrumbs}"
         )
-    else: # Model
+    else:  # Model
         setattr(container, attr, value)
 
+
 def interpolate_values(
-        container: Union[MutableMapping,List,BaseModel],
+        container: Union[MutableMapping, List, BaseModel],
         root_config_data: MutableMapping,
         breadcrumbs: List[str] = None,
 ) -> List[Tuple[str, str]]:
@@ -228,7 +250,7 @@ def interpolate_values(
         value_tuples = list(enumerate(container))
     elif isinstance(container, tuple):
         # We can't update the tuple so interpolation won't work
-        # Howver, caller should change it to a list
+        # However, caller should change it to a list
         raise ValueError(
             f"Can't interpolate {value} inside tuple to {new_value}. Make it a list! See {breadcrumbs}"
         )
@@ -263,6 +285,7 @@ def interpolate_values(
             except ValueError as e:
                 errors.append(('.'.join(breadcrumbs), str(e)))
     return errors
+
 
 def parse_as_literal_or_json(value: str) -> Any:
     try:
