@@ -64,15 +64,8 @@ docs = [
     "sphinx-rtd-theme>=2.0.0,<3",
 ]
 
-[[tool.uv.index]]
-url = "https://jfrog.accenturefederaldev.com/artifactory/api/pypi/afs-pypi-proxy/simple"
-
 [tool.uv]
 default-groups = ["dev"]
-
-[[tool.uv.index]]
-url = "https://jfrog.accenturefederaldev.com/artifactory/afs-pypi-proxy/simple"
-default = true
 
 [tool.uv.build-backend]
 module-root = ""
