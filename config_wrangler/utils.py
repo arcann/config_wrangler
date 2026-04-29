@@ -25,6 +25,8 @@ LOG_BASE_NAME = 'config_wrangler.utils'
 
 def is_union(cls):
     origin = get_origin(cls)
+    if origin is Annotated:
+        origin = cls.__origin__
     # Check for both Union and the | operator (UnionType)
     return origin is Union or origin is types.UnionType
 
@@ -62,6 +64,9 @@ def lenient_issubclass(
             return lenient_issubclass(union_type, class_or_tuple)
 
         origin = get_origin(cls)
+        if origin is Annotated:
+            origin = cls.__origin__
+
         if origin is not None:
             if is_union(origin):
                 return lenient_issubclass(origin, class_or_tuple)
