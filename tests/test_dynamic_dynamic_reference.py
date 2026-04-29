@@ -11,18 +11,25 @@ from tests.base_tests_mixin import Base_Tests_Mixin
 
 
 class Product(ConfigHierarchy):
+    product_type: str
+    grows_on_plants: bool
     name: str
     weight: int
     color: str = 'Not available'
+
+
+class EdibleProduct(Product):
+    """ Extends the generic Product with extra attributes """
+    calories: int
 
 
 class TestReferenceSection(ConfigHierarchy):
     # NOTE: In these types of dynamic references, the config will have a list of strings
     #       which will be parsed as such and then since the class contained in the List
     #       or Dict is itself a ConfigHierarchy, we'll find the config data to instantiate
-    #       those object instances. All instances will be of Product type -- no sub-classes.
+    #       those object instances. All instances will be of Product type, or a subclass.
     list_of_products_c: List[Product] = DelimitedListField()
-    list_of_products_nl: List[Product] = DelimitedListField(delimiter='\n')
+    list_of_products_nl: Annotated[List[Product], DelimitedListField(delimiter='\n')]
     dict_of_products: Dict[str, Product]
     list_of_str: Annotated[List[str], Field(default_factory=list)]
 
@@ -40,7 +47,7 @@ class TestDynamicDynamicRef(unittest.TestCase, Base_Tests_Mixin):
 
     def test_dynamic_good_direct(self):
         config = TestDynamicConfig(
-            file_name=self.test_files_path / 'dynamic' / 'good.ini',
+            file_name=self.test_files_path / 'dynamic' / 'good_dynamic.ini',
         )
         config_sec = config.main_section
 
@@ -63,18 +70,26 @@ class TestDynamicDynamicRef(unittest.TestCase, Base_Tests_Mixin):
             product3 = list_of_products[2]
             product4 = list_of_products[3]
 
-            self.assertEqual(product1.name, 'Granny Smith')
-            self.assertEqual(product1.color, 'Green')
-            self.assertEqual(product2.name, 'Over-ripe')
-            self.assertEqual(product2.color, 'Green')
-            self.assertEqual(product3.name, 'Best Pear')
-            self.assertEqual(product3.color, 'Yellow')
-            self.assertEqual(product4.name, 'Model T')
-            self.assertEqual(product4.color, 'Not available')
-            self.assertEqual(product1.weight, 15)
-            self.assertEqual(product2.weight, 10)
-            self.assertEqual(product3.weight, 18)
-            self.assertEqual(product4.weight, 750000)
+            self.assertEqual('Granny Smith', product1.name)
+            self.assertEqual('Green', product1.color)
+            self.assertEqual('Fruit', product1.product_type)
+
+            self.assertEqual('Over-ripe', product2.name)
+            self.assertEqual('Green', product2.color)
+            # banana is EdibleProduct and has an extra attribute calories
+            self.assertIsInstance(product2, EdibleProduct)
+            self.assertEqual(105, product2.calories)
+
+            self.assertEqual('Best Pear', product3.name)
+            self.assertEqual('Yellow', product3.color)
+
+            self.assertEqual('Model T', product4.name)
+            self.assertEqual('Not available', product4.color)
+            self.assertEqual('Vehicle', product4.product_type)
+            self.assertEqual(15, product1.weight)
+            self.assertEqual(10, product2.weight)
+            self.assertEqual(18, product3.weight)
+            self.assertEqual(750000, product4.weight)
             # Note: In this case the Model T was read is a generic Product,
             #       so it will not have a manufacturer
             with self.assertRaises(AttributeError):
@@ -82,8 +97,9 @@ class TestDynamicDynamicRef(unittest.TestCase, Base_Tests_Mixin):
 
         # Test the dict_of_products
         dict_of_products = config.main_section.dict_of_products
-        self.assertEqual(dict_of_products['apple'].name, 'Granny Smith')
-        self.assertEqual(dict_of_products['banana'].name, 'Over-ripe')
+        self.assertEqual('Granny Smith', dict_of_products['apple'].name)
+        self.assertEqual('Over-ripe', dict_of_products['banana'].name)
+        self.assertEqual(105, dict_of_products['banana'].calories)
 
     def test_dynamic_bad_instance(self):
         with self.assertRaises(ValueError) as raises_cm:

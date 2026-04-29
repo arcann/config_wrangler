@@ -60,7 +60,13 @@ class TestSection(ConfigHierarchy):
     my_environment: Environment
 
 
-class ConfigToTestWith(ConfigFromIniEnv):
+class TestCommonSection(ConfigHierarchy):
+    value_a: str
+    value_b: str
+    value_c: str
+
+
+class ConfigCommon(ConfigHierarchy):
 
     model_config = ConfigWranglerConfig(
         validate_default=True,
@@ -71,6 +77,14 @@ class ConfigToTestWith(ConfigFromIniEnv):
     target_database: SimDatabase
 
     test_section: TestSection
+
+    test_inherit_section_1: TestCommonSection
+    test_inherit_section_2: TestCommonSection
+    test_inherit_section_3: TestCommonSection
+
+
+class ConfigToTestWith(ConfigFromIniEnv, ConfigCommon):
+    pass
 
 
 class TestSettings(ConfigHierarchy):
@@ -106,106 +120,180 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
 
     def _test_simple_example_config(self, config):
         test_val = config.test_section.my_int
-        self.assertEqual(test_val, 123)
-        self.assertIsInstance(test_val, int)
+        self.assertEqual(123, test_val, msg='config.test_section.my_int')
+        self.assertIsInstance(test_val, int, msg='config.test_section.my_int')
 
         test_val = config.test_section.my_float
-        self.assertAlmostEqual(test_val, 123.45)
-        self.assertIsInstance(test_val, float)
+        self.assertAlmostEqual(123.45, test_val, msg='config.test_section.my_float')
+        self.assertIsInstance(test_val, float, msg='config.test_section.my_float')
 
         test_val = config.test_section.my_bool
-        self.assertEqual(test_val, True)
+        self.assertEqual(True, test_val)
         self.assertIsInstance(test_val, bool)
 
         test_val = config.test_section.my_list_auto_c
-        self.assertEqual(test_val, ['a', 'b', 'c'])
+        self.assertEqual(['a', 'b', 'c'], test_val)
         self.assertIsInstance(test_val, list)
 
         test_val = config.test_section.my_list_auto_nl
-        self.assertEqual(test_val, ['a', 'b', 'c'])
+        self.assertEqual(['a', 'b', 'c'], test_val)
         self.assertIsInstance(test_val, list)
 
         test_val = config.test_section.my_list_auto_pipe
-        self.assertEqual(test_val, ['a', 'b', 'c'])
+        self.assertEqual(['a', 'b', 'c'], test_val)
         self.assertIsInstance(test_val, list)
 
         test_val = config.test_section.my_list_c
-        self.assertEqual(test_val, ['a', 'b', 'c'])
+        self.assertEqual(['a', 'b', 'c'], test_val)
         self.assertIsInstance(test_val, list)
 
         test_val = config.test_section.my_list_python
-        self.assertEqual(test_val, ['x', 'y', 'z'])
+        self.assertEqual(['x', 'y', 'z'], test_val)
         self.assertIsInstance(test_val, list)
 
         test_val = config.test_section.my_list_json
-        self.assertEqual(test_val, ["J", "S", "O", "N"])
+        self.assertEqual(["J", "S", "O", "N"], test_val)
         self.assertIsInstance(test_val, list)
 
         test_val = config.test_section.my_list_nl
-        self.assertEqual(test_val, ['a', 'b', 'c'])
+        self.assertEqual(['a', 'b', 'c'], test_val)
         self.assertIsInstance(test_val, list)
 
         test_val = config.test_section.my_list_int_c
-        self.assertEqual(test_val, [1, 2, 3])
+        self.assertEqual([1, 2, 3], test_val)
         self.assertIsInstance(test_val, list)
         self.assertIsInstance(test_val[0], int)
 
         test_val = config.test_section.my_tuple_c
-        self.assertEqual(test_val, ('a1', 'b2', 'c3'))
+        self.assertEqual(('a1', 'b2', 'c3'), test_val)
         self.assertIsInstance(test_val, tuple)
 
         test_val = config.test_section.my_tuple_nl
-        self.assertEqual(test_val, ('a1', 'b2', 'c3'))
+        self.assertEqual(('a1', 'b2', 'c3'), test_val)
         self.assertIsInstance(test_val, tuple)
 
         test_val = config.test_section.my_tuple_int_c
-        self.assertEqual(test_val, (1, 2, 3))
+        self.assertEqual((1, 2, 3), test_val)
         self.assertIsInstance(test_val, tuple)
         self.assertIsInstance(test_val[0], int)
 
         test_val = config.test_section.my_dict
-        self.assertEqual(test_val, {1: 'One', 2: 'Two'}, f"my_dict got {test_val} expected {{1: 'One', 2: 'Two'}}")
+        self.assertEqual(
+            {1: 'One', 2: 'Two'},
+            test_val,
+            msg=f"config.test_section.my_dict got {test_val} expected {{1: 'One', 2: 'Two'}}"
+        )
         self.assertIsInstance(test_val, dict)
 
         test_val = config.test_section.my_dict_str_int
-        self.assertEqual(test_val, {"one": 1, "two": 2})
+        self.assertEqual(
+            {"one": 1, "two": 2},
+            test_val,
+            msg='config.test_section.my_dict_str_int',
+        )
         self.assertIsInstance(test_val, dict)
-        self.assertEqual(test_val['one'], 1)
+        self.assertEqual(1, test_val['one'])
         self.assertIsInstance(test_val['one'], int)
-        self.assertEqual(test_val['two'], 2)
+        self.assertEqual(2, test_val['two'])
 
-        test_val = config.test_section.my_set
-        self.assertEqual(test_val, {'A', 'B', 'C'})
-        self.assertIsInstance(test_val, set)
+        self.assertEqual(
+            {'A', 'B', 'C'},
+            config.test_section.my_set,
+            msg='config.test_section.my_set',
+        )
+        self.assertIsInstance(config.test_section.my_set, set)
 
-        test_val = config.test_section.my_set_int
-        self.assertEqual(test_val, {1, 2, 3})
-        self.assertIsInstance(test_val, set)
-        for set_val in test_val:
+        self.assertEqual(
+            {1, 2, 3},
+            config.test_section.my_set_int,
+            msg='config.test_section.my_set_int',
+        )
+        self.assertIsInstance(config.test_section.my_set_int, set)
+        for set_val in config.test_section.my_set_int:
             self.assertIsInstance(set_val, int)
 
-        test_val = config.test_section.my_frozenset
-        self.assertEqual(test_val, frozenset({'A', 'B', 'C'}))
-        self.assertIsInstance(test_val, frozenset)
+        self.assertEqual(
+            frozenset({'A', 'B', 'C'}),
+            config.test_section.my_frozenset,
+            msg='config.test_section.my_frozenset',
+        )
+        self.assertIsInstance(config.test_section.my_frozenset, frozenset)
 
-        test_val = config.test_section.my_date
-        self.assertEqual(test_val, date(year=2021, month=5, day=31))
-        self.assertIsInstance(test_val, date)
+        self.assertEqual(
+            date(year=2021, month=5, day=31),
+            config.test_section.my_date,
+            msg='config.test_section.my_date',
+        )
+        self.assertIsInstance(config.test_section.my_date, date)
 
-        test_val = config.test_section.my_time
-        self.assertEqual(test_val, time(hour=11, minute=55, second=23))
-        self.assertIsInstance(test_val, time)
+        self.assertEqual(
+            time(hour=11, minute=55, second=23),
+            config.test_section.my_time.replace(tzinfo=None),
+            msg='config.test_section.my_time',
+        )
+        self.assertIsInstance(config.test_section.my_time, time)
 
-        test_val = config.test_section.my_datetime
-        self.assertEqual(test_val, datetime(year=2021, month=5, day=31, hour=11, minute=23, second=53))
-        self.assertIsInstance(test_val, datetime)
+        self.assertEqual(
+            datetime(year=2021, month=5, day=31, hour=11, minute=23, second=53),
+            config.test_section.my_datetime.replace(tzinfo=None),
+            msg='config.test_section.my_datetime',
+        )
+        self.assertIsInstance(config.test_section.my_datetime, datetime)
 
-        test_val = config.test_section.my_url
-        self.assertEqual(str(test_val), str(Url('https://localhost:6553/')))
+        self.assertEqual(
+            str(Url('https://localhost:6553/')),
+            str(config.test_section.my_url),
+            msg='config.test_section.my_url',
+        )
 
-        self.assertEqual(config.test_section.double_interpolate, 'My DB is in ./example_db')
+        self.assertEqual(
+            'My DB is in ./example_db',
+            config.test_section.double_interpolate,
+            msg='double interpolate failed on config.test_section.double_interpolate,'
+        )
 
-        self.assertEqual(config.test_section.triple_interpolate, '--**++C++**--')
+        self.assertEqual(
+            '--**++C++**--',
+            config.test_section.triple_interpolate,
+            msg='triple interpolate failed on config.test_section.triple_interpolate'
+        )
+
+        # Test __inherits_from__
+        self.assertEqual(
+            # BaseA_${test_section:my_environment:name}
+            'BaseA_dev',
+            config.test_inherit_section_2.value_a,
+            'config.test_inherit_section_2.value_a',
+        )
+        self.assertEqual(
+            # OverrideB_2_${test_section:my_bool}
+            'OverrideB_2_ABC☕',
+            config.test_inherit_section_2.value_b,
+            msg='config.test_inherit_section_2.value_b',
+        )
+        self.assertEqual(
+            'BaseC',
+            config.test_inherit_section_2.value_c,
+            msg='config.test_inherit_section_2.value_c',
+        )
+
+        self.assertEqual(
+            # BaseA_${test_section:my_environment:name}
+            'BaseA_dev',
+            config.test_inherit_section_3.value_a,
+            msg='config.test_inherit_section_3.value_a',
+        )
+        self.assertEqual(
+            # OverrideB_2_${test_section:my_bool}
+            'OverrideB_2_ABC☕',
+            config.test_inherit_section_3.value_b,
+            msg='config.test_inherit_section_3.value_b',
+        )
+        self.assertEqual(
+            'OverrideC_3',
+            config.test_inherit_section_3.value_c,
+            msg='config.test_inherit_section_3.value_c',
+        )
 
     def test_read_start_path(self):
         config = ConfigToTestWith(
@@ -277,7 +365,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
                 file_name='test_keepass_good.ini',
                 start_path=self.get_test_files_path()
             )
-            self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
+            self.assertEqual('b2g4VhNSKegFMtxo49Dz', config.target_database.get_password())
 
         except (ValueError, ImportError) as e:
             if "No module named 'pykeepass" in str(e):
@@ -324,7 +412,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         exc_str = str(raises_cm.exception)
         print("Exception str")
         print(exc_str)
-        self.assertIn("keepass_config",  exc_str)
+        self.assertIn("keepass_config", exc_str)
 
     def test_read_keepass_bad_group(self):
         try:
@@ -386,7 +474,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
                 file_name='test_keepass_good_keepass_sub.ini',
                 start_path=self.get_test_files_path()
             )
-            self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
+            self.assertEqual('b2g4VhNSKegFMtxo49Dz', config.target_database.get_password())
 
         except (ValueError, ImportError) as e:
             if "No module named 'pykeepass" in str(e):
@@ -409,7 +497,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
                 file_name='test_keepass_good_keepass_shared_sub.ini',
                 start_path=self.get_test_files_path()
             )
-            self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
+            self.assertEqual('b2g4VhNSKegFMtxo49Dz', config.target_database.get_password())
 
         except (ValueError, ImportError) as e:
             if "No module named 'pykeepass" in str(e):
@@ -459,7 +547,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
                 file_name='test_keyring.ini',
                 start_path=self.get_test_files_path()
             )
-            self.assertEqual(config.target_database.get_password(), password)
+            self.assertEqual(password, config.target_database.get_password())
 
             d = config.model_dump()
             self.assertEqual(d['test_section']['my_url'], config.test_section.my_url)
@@ -482,12 +570,14 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         password = '1$password'
         os.environ['test1_password'] = password
 
-        config = Config1(test1={
-            'user_id': 'user1',
-            'password_source': 'ENVIRONMENT',
-        })
+        config = Config1(
+            test1={
+                'user_id': 'user1',
+                'password_source': 'ENVIRONMENT',
+            }
+        )
 
-        self.assertEqual(config.test1.get_password(), password)
+        self.assertEqual(password, config.test1.get_password())
 
     def test_env_password_direct_2(self):
         class Config1(ConfigRoot):
@@ -496,12 +586,14 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         password = '2$password'
         os.environ['user2'] = password
 
-        config = Config1(test2={
-            'user_id': 'user2',
-            'password_source': 'ENVIRONMENT',
-        })
+        config = Config1(
+            test2={
+                'user_id': 'user2',
+                'password_source': 'ENVIRONMENT',
+            }
+        )
 
-        self.assertEqual(config.test2.get_password(), password)
+        self.assertEqual(password, config.test2.get_password())
 
     def test_env_password_direct_3(self):
         class Config1(ConfigRoot):
@@ -510,12 +602,14 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         password = '3$password'
         os.environ['Password_user3'] = password
 
-        config = Config1(test3={
-            'user_id': 'user3',
-            'password_source': 'ENVIRONMENT',
-        })
+        config = Config1(
+            test3={
+                'user_id': 'user3',
+                'password_source': 'ENVIRONMENT',
+            }
+        )
 
-        self.assertEqual(config.test3.get_password(), password)
+        self.assertEqual(password, config.test3.get_password())
 
     def test_env_password_keypass(self):
         try:
@@ -530,18 +624,20 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         # since password.keepass.password_source is ENVIRONMENT
         os.environ['KEEPASS_PASSWORD'] = 'supersecret_encryption_password'
 
-        config = ConfigEnvKeypass(**{
-            'test': {
-                'user_id': 'python_unittester_01',
-                'password_source': 'KEEPASS',
-                "keepass_group": "aws",
-            },
-            'passwords': {
-                'keepass': {
-                    'database_path': "keepass_db.kdbx",
-                    'password_source': 'ENVIRONMENT',
+        config = ConfigEnvKeypass(
+            **{
+                'test': {
+                    'user_id': 'python_unittester_01',
+                    'password_source': 'KEEPASS',
+                    "keepass_group": "aws",
+                },
+                'passwords': {
+                    'keepass': {
+                        'database_path': "keepass_db.kdbx",
+                        'password_source': 'ENVIRONMENT',
+                    }
                 }
             }
-        })
+            )
         password = 'b2g4VhNSKegFMtxo49Dz'
         self.assertEqual(password, config.test.get_password())

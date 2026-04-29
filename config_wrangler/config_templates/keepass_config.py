@@ -31,12 +31,16 @@ class KeepassConfig(ConfigHierarchy):
     keyring_user_id: Optional[str] = None
     alternate_group_names: Dict[str, str] = {}
 
+    # noinspection PyDataclass
     _db = PrivateAttr(default=None)
+    # noinspection PyDataclass
     _alternate_group_names_lower = PrivateAttr(default=None)
+    # noinspection PyDataclass
     _keepass_credentials = PrivateAttr(default=None)
 
     def open_database(self, force_refresh: bool = False) -> 'pykeepass.PyKeePass':
         if self._db is None or force_refresh:
+            # noinspection PyUnresolvedReferences
             from pykeepass import PyKeePass
 
             credentials_args = dict(**self.__dict__)

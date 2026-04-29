@@ -4,13 +4,13 @@ from unittest import mock
 
 import pydantic
 
-from config_wrangler.config_from_toml_env import ConfigFromTomlEnv
+from config_wrangler.config_from_yaml_env import ConfigFromYamlEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.keepass_config import KeepassConfig
 from tests.test_ini_parser import TestIniParser, TestSettings, ConfigCommon
 
 
-class ConfigToTestWith(ConfigFromTomlEnv, ConfigCommon):
+class ConfigToTestWith(ConfigFromYamlEnv, ConfigCommon):
     pass
 
 
@@ -30,72 +30,72 @@ class ConfigWithBadKeypass(ConfigToTestWith):
     keepass: FakeKeepassConfig
 
 
-class TestTomlParser(TestIniParser):
+class TestYamlParser(TestIniParser):
 
     def setUp(self) -> None:
         try:
-            import toml
+            import yaml
         except ImportError:
-            self.skipTest("Extra toml not installed")
+            self.skipTest("Extra yaml not installed")
 
     def get_test_files_path(self):
-        return self.get_package_path() / 'test_config_files_toml'
+        return self.get_package_path() / 'test_config_files_yaml'
 
     def test_read_start_path(self):
         config = ConfigToTestWith(
-            file_name='test_good.toml',
+            file_name='test_good.yaml',
             start_path=self.get_test_files_path()
         )
         self._test_simple_example_config(config)
 
     def test_read_start_path_deeper_start(self):
         config = ConfigToTestWith(
-            file_name='test_good.toml',
+            file_name='test_good.yaml',
             start_path=os.path.join(self.get_test_files_path(), 'deeper_dir')
         )
         self._test_simple_example_config(config)
 
     def test_read_start_path_deeper_start_2(self):
         config = ConfigToTestWith(
-            file_name='test_good.toml',
+            file_name='test_good.yaml',
             start_path=os.path.join(self.get_test_files_path(), 'deeper_dir', 'deeper_does_not_exist')
         )
         self._test_simple_example_config(config)
 
     def test_read_cwd(self):
         with mock.patch("os.getcwd", return_value=self.get_test_files_path()) as mock_cwd:
-            config = ConfigToTestWith(file_name='test_good.toml')
+            config = ConfigToTestWith(file_name='test_good.yaml')
             self._test_simple_example_config(config)
             mock_cwd.assert_called()
 
     def test_read_cwd_deeper_start(self):
         with mock.patch("os.getcwd", return_value=os.path.join(self.get_test_files_path(), 'deeper_dir')) as mock_cwd:
-            config = ConfigToTestWith(file_name='test_good.toml')
+            config = ConfigToTestWith(file_name='test_good.yaml')
             self._test_simple_example_config(config)
             mock_cwd.assert_called()
 
     def test_does_not_exist(self):
         with self.assertRaises(FileNotFoundError):
-            _ = ConfigToTestWith(file_name='test_dne.toml')
+            _ = ConfigToTestWith(file_name='test_dne.yaml')
 
     def test_read_no_password(self):
         with self.assertRaises(pydantic.ValidationError):
             _ = ConfigToTestWith(
-                file_name='test_no_pw.toml',
+                file_name='test_no_pw.yaml',
                 start_path=self.get_test_files_path()
             )
 
     def test_missing_section(self):
         with self.assertRaises(pydantic.ValidationError):
             _ = ConfigToTestWith(
-                file_name='test_no_pw.toml',
+                file_name='test_no_pw.yaml',
                 start_path=self.get_test_files_path()
             )
 
     def test_bad_interpolations(self):
         with self.assertRaises(ValueError):
             _ = ConfigToTestWith(
-                file_name='test_bad_interpolations.toml',
+                file_name='test_bad_interpolations.yaml',
                 start_path=self.get_test_files_path()
             )
 
@@ -108,10 +108,11 @@ class TestTomlParser(TestIniParser):
 
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithKeypass(
-                file_name='test_keepass_good.toml',
-                start_path=self.get_test_files_path()
-            )
+            with mock.patch("os.getcwd", return_value=self.get_test_files_path()) as mock_cwd:
+                config = ConfigWithKeypass(
+                    file_name='test_keepass_good.yaml',
+                    start_path=self.get_test_files_path()
+                )
             self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
 
         except (ValueError, ImportError) as e:
@@ -126,7 +127,7 @@ class TestTomlParser(TestIniParser):
     def test_read_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
             _ = ConfigWithKeypass(
-                file_name='test_keepass_bad_missing.toml',
+                file_name='test_keepass_bad_missing.yaml',
                 start_path=self.get_test_files_path()
             )
         exc_str = str(raises_cm.exception)
@@ -139,7 +140,7 @@ class TestTomlParser(TestIniParser):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
         with self.assertRaises(ValueError) as raises_cm:
             _ = ConfigWithKeypass(
-                file_name='test_keepass_bad_values.toml',
+                file_name='test_keepass_bad_values.yaml',
                 start_path=self.get_test_files_path()
             )
         exc_str = str(raises_cm.exception)
@@ -152,7 +153,7 @@ class TestTomlParser(TestIniParser):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
         with self.assertRaises(ValueError) as raises_cm:
             config = ConfigWithBadKeypass(
-                file_name='test_keepass_bad_missing_entirely.toml',
+                file_name='test_keepass_bad_missing_entirely.yaml',
                 start_path=self.get_test_files_path()
             )
             config.target_database.get_password()
@@ -167,7 +168,7 @@ class TestTomlParser(TestIniParser):
 
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
-                file_name='test_keepass_good.toml',
+                file_name='test_keepass_good.yaml',
                 start_path=self.get_test_files_path()
             )
 
@@ -191,7 +192,7 @@ class TestTomlParser(TestIniParser):
 
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             config = ConfigWithKeypass(
-                file_name='test_keepass_good.toml',
+                file_name='test_keepass_good.yaml',
                 start_path=self.get_test_files_path()
             )
 
@@ -220,7 +221,7 @@ class TestTomlParser(TestIniParser):
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             os.chdir(self.get_test_files_path())
             config = ConfigWithTestFilePath(
-                file_name='test_keepass_good_keepass_sub.toml',
+                file_name='test_keepass_good_keepass_sub.yaml',
                 start_path=self.get_test_files_path()
             )
             self.assertEqual(
@@ -247,10 +248,11 @@ class TestTomlParser(TestIniParser):
 
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithTestFilePath(
-                file_name='test_keepass_good_keepass_shared_sub.toml',
-                start_path=self.get_test_files_path()
-            )
+            with mock.patch("os.getcwd", return_value=self.get_test_files_path()) as mock_cwd:
+                config = ConfigWithTestFilePath(
+                    file_name='test_keepass_good_keepass_shared_sub.yaml',
+                    start_path=self.get_test_files_path()
+                )
             self.assertEqual(config.target_database.get_password(), 'b2g4VhNSKegFMtxo49Dz')
 
         except (ValueError, ImportError) as e:
@@ -265,7 +267,7 @@ class TestTomlParser(TestIniParser):
     def test_read_sub_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
             _ = ConfigToTestWith(
-                file_name='test_keepass_bad_missing_sub.toml',
+                file_name='test_keepass_bad_missing_sub.yaml',
                 start_path=self.get_test_files_path()
             )
         exc_str = str(raises_cm.exception)
@@ -277,7 +279,7 @@ class TestTomlParser(TestIniParser):
     def test_read_shared_sub_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
             _ = ConfigToTestWith(
-                file_name='test_keepass_bad_missing_shared_sub.toml',
+                file_name='test_keepass_bad_missing_shared_sub.yaml',
                 start_path=self.get_test_files_path()
             )
         exc_str = str(raises_cm.exception)
@@ -300,7 +302,7 @@ class TestTomlParser(TestIniParser):
                 # If keyring is actually installed, use it to set the password
                 keyring.set_password('example_section', 'python_unittester_01', password)
             config = ConfigToTestWith(
-                file_name='test_keyring.toml',
+                file_name='test_keyring.yaml',
                 start_path=self.get_test_files_path()
             )
             self.assertEqual(config.target_database.get_password(), password)

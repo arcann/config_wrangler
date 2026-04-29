@@ -5,11 +5,7 @@ from config_wrangler.config_from_ini_env import ConfigFromIniEnv
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced
 from tests.base_tests_mixin import Base_Tests_Mixin
-
-
-class Product(ConfigHierarchy):
-    name: str
-    weight: int
+from tests.test_dynamic_dynamic_reference import Product
 
 
 class Car(Product):
@@ -47,7 +43,7 @@ class TestDynamicStaticRef(unittest.TestCase, Base_Tests_Mixin):
 
     def test_dynamic_good_direct(self):
         config = TestDynamicConfig(
-            file_name=self.test_files_path / 'dynamic' / 'good.ini',
+            file_name=self.test_files_path / 'dynamic' / 'good_dynamic.ini',
         )
         list_of_products = config.main_section.list_of_products_c
         self.assertEqual(len(list_of_products), 4)

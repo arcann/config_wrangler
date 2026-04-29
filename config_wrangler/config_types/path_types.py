@@ -98,6 +98,7 @@ def _find_in_system_path(path: Path) -> Path:
     if path is None:
         raise ValueError(f"Can't find None path")
 
+    # noinspection PyDeprecation
     full_path = shutil.which(str(path))
     if full_path is None:
         raise ValueError(f"{path} not found")

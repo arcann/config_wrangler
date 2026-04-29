@@ -17,6 +17,12 @@ from config_wrangler.config_types.delimited_field import DelimitedListFieldInfo
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced, DynamicFieldInfo
 
 
+INHERITS_ATTRIBUTE_NAME = '__inherits_from__'
+CLASS_ATTRIBUTE_NAME = '__config_class__'
+
+LOG_BASE_NAME = 'config_wrangler.utils'
+
+
 def is_union(cls):
     origin = get_origin(cls)
     # Check for both Union and the | operator (UnionType)
@@ -70,11 +76,11 @@ def lenient_issubclass(
 
 
 def get_inner_type(cls: Any):
-    origin = get_origin(cls)
-
     if is_union(cls):
-        for inner_cls in get_args(cls):
+        args_list = get_args(cls)
+        for inner_cls in args_list:
             return get_inner_type(inner_cls)
+        raise ValueError(f"Union type with no contents: {cls}")
     else:
         return get_args(cls)
 
@@ -111,7 +117,17 @@ def merge_configs(child: MutableMapping, parent: MutableMapping) -> None:
                 pass
 
 
-def resolve_variable(root_config_data: MutableMapping, variable_name: str, part_delimiter=':') -> Any:
+def resolve_variable(
+        root_config_data: MutableMapping,
+        variable_name: str,
+        part_delimiter: Optional[str] = None
+) -> Any:
+    if part_delimiter is None:
+        if ':' in variable_name:
+            part_delimiter = ':'
+        else:
+            part_delimiter = '.'
+
     variable_name_parts = variable_name.split(part_delimiter)
     result = root_config_data
     for part in variable_name_parts:
@@ -124,6 +140,24 @@ def resolve_variable(root_config_data: MutableMapping, variable_name: str, part_
         else:
             raise ValueError(f"<<{part} NOT FOUND when resolving variable with parts: {variable_name_parts}>>")
     return result
+
+
+def process_errors_list(
+        errors_list: list[tuple[str, str]],
+        function_name: str,
+):
+    if len(errors_list) > 0:
+        log = logging.getLogger(__name__)
+        log.error(f"{len(errors_list)} {function_name} config errors found:")
+        errors_str_list = []
+        indent = ' ' * 3
+        for error in errors_list:
+            error_msg = f"{indent}{error[0]}: {error[1]}"
+            log.error(error_msg)
+            errors_str_list.append(error_msg)
+
+        errors_str = f"\n".join(errors_str_list)
+        raise ValueError(f"Config {function_name} Errors (cnt={len(errors_list)}). Errors=\n{indent}{errors_str}")
 
 
 _interpolation_re = re.compile(r"\${([^}]+)}")
@@ -173,7 +207,7 @@ def interpolate_value(*, value: str, container: MutableMapping, root_config_data
                                     variable_name,
                                     part_delimiter=part_delimiter,
                                 )
-                            except ValueError as e2:
+                            except ValueError:
                                 ValueError(f"<<{e1} resolving {variable_name}>>")
                     else:
                         try:
@@ -192,10 +226,10 @@ def interpolate_value(*, value: str, container: MutableMapping, root_config_data
                         result_values.append(new_value[next_start:])
                     result_values = [part for part in result_values if part != '']
                     if len(result_values) == 1:
-                        # Possibly not a string -- maybe a dict
                         new_value = result_values[0]
+                        # if the value isn't a string, we can't do more interpolation on it
                         if not isinstance(new_value, str):
-                            done = True
+                            return new_value
                     else:
                         new_value = ''.join([str(v) for v in result_values])
 
@@ -220,7 +254,8 @@ def set_container_value(
         container_type: ContainerType,
         container: Union[MutableMapping, List, BaseModel],
         attr: Union[str, int],
-        value: Any
+        value: Any,
+        breadcrumbs: List[str] = None,
 ):
     if container_type == ContainerType.Mapping:
         container[attr] = value
@@ -232,6 +267,73 @@ def set_container_value(
         )
     else:  # Model
         setattr(container, attr, value)
+
+
+def process_inheritance(
+        container: Union[MutableMapping, List, BaseModel],
+        *,
+        root_config_data: MutableMapping,
+        breadcrumbs: List[str] = None,
+) -> List[Tuple[str, str]]:
+    errors = []
+    if breadcrumbs is None:
+        breadcrumbs = []
+    if isinstance(container, MutableMapping):
+        container_type = ContainerType.Mapping
+        if INHERITS_ATTRIBUTE_NAME in container:
+            inherit_from_sections_str = container[INHERITS_ATTRIBUTE_NAME]
+            del container[INHERITS_ATTRIBUTE_NAME]
+            inherit_from_sections = [s.strip() for s in inherit_from_sections_str.split(',')]
+            for inherit_from_section_name in inherit_from_sections:
+                inherit_from_section = resolve_variable(
+                    root_config_data=root_config_data,
+                    variable_name=inherit_from_section_name,
+                )
+                sub_errors = process_inheritance(
+                    container=inherit_from_section,
+                    root_config_data=root_config_data,
+                    breadcrumbs=breadcrumbs + [inherit_from_section],
+                )
+                errors.extend(sub_errors)
+                # Add attribute values from parent class that do not already have values
+                for attr, value in inherit_from_section.items():
+                    if attr not in container:
+                        container[attr] = value
+        value_tuples = container.items()
+    elif isinstance(container, list):
+        container_type = ContainerType.List
+        value_tuples = list(enumerate(container))
+    elif isinstance(container, tuple):
+        # We can't update the tuple so interpolation won't work
+        # However, caller should change it to a list
+        raise ValueError(
+            f"Can't process inheritance values inside tuple container {container}. "
+            f"Make it a list! See {breadcrumbs}"
+        )
+    else:
+        container_type = ContainerType.Model
+        value_tuples = list(container)
+
+    for attr, value in value_tuples:
+        if isinstance(value, tuple):
+            warnings.warn(f"Value of {attr} changed from tuple to list")
+            # Convert to a list
+            value = list(value)
+            set_container_value(
+                container_type=container_type,
+                container=container,
+                attr=attr,
+                value=value,
+                breadcrumbs=breadcrumbs,
+            )
+        if isinstance(value, MutableMapping) or isinstance(value, BaseModel) or isinstance(value, list):
+            sub_errors = process_inheritance(
+                container=value,
+                root_config_data=root_config_data,
+                breadcrumbs=breadcrumbs + [attr]
+            )
+            errors.extend(sub_errors)
+    return errors
 
 
 def interpolate_values(
@@ -252,35 +354,46 @@ def interpolate_values(
         # We can't update the tuple so interpolation won't work
         # However, caller should change it to a list
         raise ValueError(
-            f"Can't interpolate {value} inside tuple to {new_value}. Make it a list! See {breadcrumbs}"
+            f"Can't interpolate values inside tuple container {container}. "
+            f"Make it a list! See {breadcrumbs}"
         )
     else:
         container_type = ContainerType.Model
         value_tuples = list(container)
 
     for attr, value in value_tuples:
-        if isinstance(value, MutableMapping) or isinstance(value, BaseModel) or isinstance(value, list) or isinstance(value, tuple):
-            if isinstance(value, tuple):
-                warnings.warn(f"Value of {attr} changed from tuple to list")
-                # Convert to a list
-                value = list(value)
-                set_container_value(
-                    container_type=container_type,
-                    container=container,
-                    attr=attr,
-                    value=value,
-                )
-            sub_errors = interpolate_values(container=value, root_config_data=root_config_data, breadcrumbs=breadcrumbs + [attr])
+        if isinstance(value, tuple):
+            warnings.warn(f"Value of {attr} changed from tuple to list")
+            # Convert to a list
+            value = list(value)
+            set_container_value(
+                container_type=container_type,
+                container=container,
+                attr=attr,
+                value=value,
+                breadcrumbs=breadcrumbs,
+            )
+        if isinstance(value, MutableMapping) or isinstance(value, BaseModel) or isinstance(value, list):
+            sub_errors = interpolate_values(
+                container=value,
+                root_config_data=root_config_data,
+                breadcrumbs=breadcrumbs + [attr]
+            )
             errors.extend(sub_errors)
         elif isinstance(value, str):
             try:
-                new_value = interpolate_value(value=value, container=container, root_config_data=root_config_data)
+                new_value = interpolate_value(
+                    value=value,
+                    container=container,
+                    root_config_data=root_config_data
+                )
                 if new_value != value:
                     set_container_value(
                         container_type=container_type,
                         container=container,
                         value=new_value,
                         attr=attr,
+                        breadcrumbs=breadcrumbs,
                     )
             except ValueError as e:
                 errors.append(('.'.join(breadcrumbs), str(e)))
@@ -330,7 +443,7 @@ def parse_delimited_list(
     else:
         try:
             result = parse_as_literal_or_json(value)
-        except ValueError as e:
+        except ValueError:
             # Single value list
             result = [value]
     return result
@@ -382,6 +495,28 @@ def find_referenced_section(
         return section_name
 
 
+def import_class(class_path: str):
+    """
+    Import a class from a fully qualified string path.
+
+    Args:
+        class_path: String like "module.submodule.ClassName"
+
+    Returns:
+        The class object
+
+    Example:
+        >>> MyClass = import_class("my_package.my_module.MyClass")
+        >>> instance = MyClass()
+    """
+    module_path, class_name = class_path.rsplit(".", 1)
+
+    import importlib
+    module = importlib.import_module(module_path)
+
+    return getattr(module, class_name)
+
+
 def build_referenced_objects(
     field_name: str,
     field_info: FieldInfo,
@@ -391,6 +526,7 @@ def build_referenced_objects(
     list_of_sections: Sequence[str],
     inner_type: type[BaseModel],
 ) -> Dict[str, BaseModel]:
+    log = logging.getLogger(f"{LOG_BASE_NAME}.build_referenced_objects")
     section_name = None
     try:
         section_contents = dict()
@@ -410,7 +546,31 @@ def build_referenced_objects(
                 # so we don't build a new instance, we instead just store the pointer.
                 inner_type_instance = DynamicallyReferenced(ref=section_name)
             else:
-                inner_type_instance = inner_type(**ref_section_value)
+                log.debug(f"Processing Section Inheritance for dynamic {section_name} in {parents}")
+                inheritance_errors = process_inheritance(ref_section_value, root_config_data=root_config_data)
+                process_errors_list(
+                    errors_list=inheritance_errors,
+                    function_name='Section Inheritance'
+                )
+                log.debug(f"Interpolating config value references for dynamic {section_name} in {parents}")
+                interpolate_errors = interpolate_values(ref_section_value, root_config_data=root_config_data)
+                process_errors_list(
+                    errors_list=interpolate_errors,
+                    function_name='Value Interpolation'
+                )
+                if CLASS_ATTRIBUTE_NAME in ref_section_value:
+                    instance_class_name = ref_section_value[CLASS_ATTRIBUTE_NAME]
+                    instance_class = import_class(instance_class_name)
+                    if not issubclass(instance_class, inner_type):
+                        log.warning(
+                            f"{instance_class_name} got {instance_class} which is not a subclass of {inner_type}. "
+                            "This could lead to errors if the class does not implement all attributes & methods."
+                        )
+                    # Build pydantic instance
+                    inner_type_instance = instance_class(**ref_section_value)
+                else:
+                    # Build pydantic instance
+                    inner_type_instance = inner_type(**ref_section_value)
             section_contents[section_name] = inner_type_instance
         return section_contents
     except ValidationError as e:
@@ -625,6 +785,7 @@ def match_config_data_to_field_or_submodel(
             raise ValueError(f"Field {full_name(parents, field_name)} not found.")
 
         if isinstance(field_info, DynamicFieldInfo):
+            # noinspection PyTypeChecker
             ref_object_dict = build_referenced_objects(
                 field_name=field_name,
                 field_info=field_info,

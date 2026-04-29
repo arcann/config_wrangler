@@ -58,3 +58,16 @@ name = "dev"
 # For example to run we'll make both paths relative to current
 temp_data_dir = "./temp_data/${test_section:my_environment:name}"
 source_data_dir = "."
+
+[test_inherit_section_1]
+value_a = 'BaseA'
+value_b = 'BaseB'
+value_c = 'BaseC'
+
+[test_inherit_section_2]
+__inherits_from__='test_inherit_section_1'
+value_b='OverrideB_2'
+
+[test_inherit_section_3]
+__inherits_from__='test_inherit_section_2'
+value_c='OverrideC_3'
