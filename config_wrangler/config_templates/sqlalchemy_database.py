@@ -307,7 +307,25 @@ class SQLAlchemyDatabase(Credentials):
                 # Moto seems to return naive datetime in local tz.
                 # Boto3 returns tz aware datetime
                 server_expiry = server_expiry.astimezone(tz=None)
-            self._rs_credential_expiry = min(self._rs_credential_expiry, server_expiry)
+            expire_in_seconds = (server_expiry - self._now()).total_seconds()
+            logging.info(
+                f'get_cluster_credentials returned credentials that expire in {expire_in_seconds} seconds '
+                f'at {server_expiry}'
+            )
+
+            if expire_in_seconds < self.rs_new_credentials_seconds:
+                expire_in_seconds = int(expire_in_seconds * 0.9)
+                self._rs_credential_expiry = self._now() + timedelta(seconds=expire_in_seconds)
+                logging.info(
+                    f'get_cluster_credentials: Using 90% of the available lifetime. Will get new credentials in {expire_in_seconds} seconds '
+                    f'at {self._rs_credential_expiry}'
+                )
+        else:
+            logging.info(
+                'get_cluster_credentials did not specify Expiration. '
+                f'Will use config setting of {self.rs_new_credentials_seconds} seconds. '
+                f'Expire at {self._rs_credential_expiry}'
+            )
 
         return new_credentials['DbUser'], new_credentials['DbPassword']
 
@@ -381,7 +399,10 @@ class SQLAlchemyDatabase(Credentials):
                 elif self.poolclass == 'NullPool':
                     kwargs['poolclass'] = NullPool
                 else:
-                    raise ValueError(f'Unexpected poolclass {self.poolclass}')
+                    raise ValueError(
+                        f'Unexpected poolclass {self.poolclass}. '
+                        f'Valid choices: QueuePool or NullPool.'
+                    )
 
             self._engine = create_engine(self.get_uri(), **kwargs)
 
