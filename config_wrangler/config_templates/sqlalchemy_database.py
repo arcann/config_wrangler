@@ -22,6 +22,8 @@ try:
     from sqlalchemy.pool import QueuePool, NullPool
     # noinspection PyPackageRequirements
     from sqlalchemy.exc import SQLAlchemyError
+    # noinspection PyPackageRequirements
+    from sqlalchemy.exc import DisconnectionError
 except ImportError:
     raise ImportError("SQLAlchemyDatabase requires sqlalchemy to be installed")
 
@@ -312,10 +314,11 @@ class SQLAlchemyDatabase(Credentials):
                 f'get_cluster_credentials returned credentials that expire in {expire_in_seconds} seconds '
                 f'at {server_expiry}'
             )
+            safe_expire_in_seconds = int(expire_in_seconds * 0.9)
+            safe_credential_expiry = self._now() + timedelta(seconds=safe_expire_in_seconds)
 
-            if expire_in_seconds < self.rs_new_credentials_seconds:
-                expire_in_seconds = int(expire_in_seconds * 0.9)
-                self._rs_credential_expiry = self._now() + timedelta(seconds=expire_in_seconds)
+            if safe_credential_expiry < self._rs_credential_expiry:
+                self._rs_credential_expiry = safe_credential_expiry
                 logging.info(
                     f'get_cluster_credentials: Using 90% of the available lifetime. Will get new credentials in {expire_in_seconds} seconds '
                     f'at {self._rs_credential_expiry}'
@@ -406,25 +409,68 @@ class SQLAlchemyDatabase(Credentials):
 
             self._engine = create_engine(self.get_uri(), **kwargs)
 
-            # Make an event listener, so we can get new RS credentials if needed
-            @event.listens_for(self._engine, 'do_connect', named=True)
-            def engine_do_connect(**kw):
-                """
-                listen for the 'do_connect' event
-                """
-                # from bi_etl.utility import dict_to_str
-                # print(dict_to_str(kw))
-                if self.use_get_cluster_credentials:
+            if self.use_get_cluster_credentials:
+                log = logging.getLogger('get_cluster_credentials')
+
+                # Make an event listener, so we can get new RS credentials if needed
+                @event.listens_for(self._engine, 'do_connect', named=True)
+                def engine_do_connect(**kw):
+                    """
+                    listen for the 'do_connect' event
+                    """
+                    # from bi_etl.utility import dict_to_str
+                    # print(dict_to_str(kw))
                     if self._now() >= self._rs_credential_expiry:
-                        logging.info('Getting new Redshift cluster credentials')
+                        log.info(
+                            f'connect: Calling Redshift get_cluster_credentials since it is after {self._rs_credential_expiry}'
+                        )
                         db_user, password = self.get_cluster_credentials()
                         kw['cparams']['user'] = db_user
                         kw['cparams']['password'] = password
+                    else:
+                        log.debug(
+                            f'connect: Creds still valid. Good until {self._rs_credential_expiry}'
+                        )
 
-                # Return None to allow control to pass to the next event handler and ultimately
-                # to allow the dialect to connect normally, given the updated arguments.
-                return None
-            # End engine_do_connect sub function
+                    # Return None to allow control to pass to the next event handler and ultimately
+                    # to allow the dialect to connect normally, given the updated arguments.
+                    return None
+                # End engine_do_connect sub function
+
+                @event.listens_for(self._engine, 'checkout')
+                def receive_checkout(dbapi_connection, connection_record, connection_proxy):
+                    """
+                    listen for the 'checkout' event
+                    """
+                    if self._now() >= self._rs_credential_expiry:
+                        log.info(
+                            f'checkout: Disconnecting pool engine since it is after {self._rs_credential_expiry}'
+                        )
+                        raise DisconnectionError(f"Credentials expired")
+                    else:
+                        log.debug(
+                            f'checkout: Engine still valid. Good until {self._rs_credential_expiry}'
+                        )
+                # End engine receive_checkout
+
+                @event.listens_for(self._engine, 'engine_connect')
+                def receive_engine_connect(conn):
+                    """
+                    listen for the 'engine_connect' event
+                    """
+                    log.info(
+                        f'engine_connect: Creds expire {self._rs_credential_expiry} for {conn}'
+                    )
+
+                @event.listens_for(self._engine, 'engine_disposed')
+                def receive_engine_connect(conn):
+                    """
+                    listen for the 'engine_connect' event
+                    """
+                    log.info(
+                        f'engine_disposed: Creds expire {self._rs_credential_expiry} for {conn}'
+                    )
+
 
         return self._engine
 
