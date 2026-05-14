@@ -4,3 +4,4 @@
 /.tox/
 /.idea/
 /.venv/
+/uv.lock
