@@ -5,15 +5,13 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import model_validator, PrivateAttr
 
-from config_wrangler.config_templates.password_source import PasswordSource
-
 try:
     # noinspection PyPackageRequirements
-    from sqlalchemy.engine import Engine
+    from sqlalchemy.engine import Engine, ExceptionContext
     # noinspection PyPackageRequirements
     from sqlalchemy.sql.schema import DEFAULT_NAMING_CONVENTION
     # noinspection PyPackageRequirements
-    from sqlalchemy import create_engine, event, MetaData
+    from sqlalchemy import create_engine, event, MetaData, select
     # noinspection PyPackageRequirements
     from sqlalchemy.engine.url import URL
     # noinspection PyPackageRequirements
@@ -21,13 +19,12 @@ try:
     # noinspection PyPackageRequirements
     from sqlalchemy.pool import QueuePool, NullPool
     # noinspection PyPackageRequirements
-    from sqlalchemy.exc import SQLAlchemyError
-    # noinspection PyPackageRequirements
-    from sqlalchemy.exc import DisconnectionError
+    from sqlalchemy.exc import SQLAlchemyError, DBAPIError, DisconnectionError
 except ImportError:
     raise ImportError("SQLAlchemyDatabase requires sqlalchemy to be installed")
 
 from config_wrangler.config_templates.credentials import Credentials
+from config_wrangler.config_templates.password_source import PasswordSource
 
 if TYPE_CHECKING:
     from mypy_boto3_redshift.client import RedshiftClient
@@ -152,6 +149,13 @@ class SQLAlchemyDatabase(Credentials):
     https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.create_engine    
     """
 
+    dbapi_args: Dict[str, Any] = {}
+    """
+    A dictionary with extra arguments to pass to the DBAPI via SQLAlchemy URI query parameters
+    See
+    https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.engine.URL.query    
+    """
+
     arraysize: Optional[int] = 5000
     """
     Only used for Oracle. Passed to SQLAlchemy create_engine function.
@@ -171,14 +175,14 @@ class SQLAlchemyDatabase(Credentials):
     """
 
     # Private attribute used to hold the engine
-    _engine = PrivateAttr(default=None)
-    _sqlite_connection = PrivateAttr(default=None)
+    _engine: 'Engine' = PrivateAttr(default=None)
+    _sqlite_connection: 'sqlalchemy.engine.base.Connection' = PrivateAttr(default=None)
     # Private attribute used to hold the redshift client
     _rs_client: 'RedshiftClient' = PrivateAttr(default=None)
     _rs_credential_expiry: datetime = PrivateAttr(default=None)
 
     # Values to hide from config exports
-    _private_value_atts = PrivateAttr(default={'password', 'aws_secret_access_key'})
+    _private_value_atts: set[str] = PrivateAttr(default={'password', 'aws_secret_access_key'})
 
     def __repr__(self):
         return Credentials.__repr__(self)
@@ -193,7 +197,7 @@ class SQLAlchemyDatabase(Credentials):
     def translate(cls, values):
         if not isinstance(values, dict):
             raise ValueError(f"translate values: {values} must be a dict not {type(values)}")
-        
+
         # Convert from old setting names to new names
         name_map = {
             'dsn': 'host',
@@ -261,16 +265,17 @@ class SQLAlchemyDatabase(Credentials):
         return datetime.now(timezone.utc)
 
     def get_cluster_credentials(self) -> Tuple[str, str]:
+        log = logging.getLogger('get_cluster_credentials')
         if self._rs_client is None:
             import boto3
 
             if self.password_source == PasswordSource.AWS_ASSUME_ROLE:
                 from config_wrangler.config_templates.aws.aws_session import AWS_Session
-                rs_session = AWS_Session(
+                self._rs_session = AWS_Session(
                     region_name=self.rs_region_name,
                     password_source=self.password_source,
                 )
-                self._rs_client = rs_session.session.client(
+                self._rs_client = self._rs_session.session.client(
                     'redshift',
                     region_name=self.rs_region_name,
                 )
@@ -292,16 +297,17 @@ class SQLAlchemyDatabase(Credentials):
             extra_get_cluster_credentials_args['DbGroups'] = self.rs_db_groups
 
         new_credentials = self._rs_client.get_cluster_credentials(
-                DbUser=self.rs_db_user_id,
-                DbName=self.database_name,
-                DurationSeconds=self.rs_duration_seconds,
-                ClusterIdentifier=self.rs_cluster_id,
-                **extra_get_cluster_credentials_args
-            )
+            DbUser=self.rs_db_user_id,
+            DbName=self.database_name,
+            DurationSeconds=self.rs_duration_seconds,
+            ClusterIdentifier=self.rs_cluster_id,
+            **extra_get_cluster_credentials_args
+        )
         rs_new_credentials_timedelta = timedelta(seconds=self.rs_new_credentials_seconds)
         self._rs_credential_expiry = self._now() + rs_new_credentials_timedelta
         if 'DbUser' not in new_credentials or 'DbPassword' not in new_credentials:
             raise SQLAlchemyError(f'Invalid response from get_cluster_credentials got {new_credentials}')
+
         if 'Expiration' in new_credentials:
             # Expire when redshift said or sooner as specified by rs_new_credentials_seconds
             server_expiry = new_credentials['Expiration']
@@ -310,25 +316,30 @@ class SQLAlchemyDatabase(Credentials):
                 # Boto3 returns tz aware datetime
                 server_expiry = server_expiry.astimezone(tz=None)
             expire_in_seconds = (server_expiry - self._now()).total_seconds()
-            logging.info(
-                f'get_cluster_credentials returned credentials that expire in {expire_in_seconds} seconds '
+            log.debug(
+                f'Got credentials that expire in {expire_in_seconds} seconds '
                 f'at {server_expiry}'
             )
-            safe_expire_in_seconds = int(expire_in_seconds * 0.9)
+            safe_expire_in_seconds = max(expire_in_seconds - (15*60), 1)
             safe_credential_expiry = self._now() + timedelta(seconds=safe_expire_in_seconds)
 
             if safe_credential_expiry < self._rs_credential_expiry:
                 self._rs_credential_expiry = safe_credential_expiry
-                logging.info(
-                    f'get_cluster_credentials: Using 90% of the available lifetime. Will get new credentials in {expire_in_seconds} seconds '
+                log.debug(
+                    f'Using available lifetime minus up to 15 minutes. Will get new credentials in {safe_expire_in_seconds} seconds '
                     f'at {self._rs_credential_expiry}'
                 )
         else:
-            logging.info(
-                'get_cluster_credentials did not specify Expiration. '
+            log.warning(
+                'AWS did not specify Expiration. '
                 f'Will use config setting of {self.rs_new_credentials_seconds} seconds. '
                 f'Expire at {self._rs_credential_expiry}'
             )
+        iam_expiry = self._rs_session.get_session_expiry()
+        log.debug(f"IAM expiry = {iam_expiry}")
+        if iam_expiry < self._rs_credential_expiry:
+            self._rs_credential_expiry = iam_expiry
+            log.debug(f"IAM credentials expire sooner. Using that value = {iam_expiry}")
 
         return new_credentials['DbUser'], new_credentials['DbPassword']
 
@@ -362,6 +373,7 @@ class SQLAlchemyDatabase(Credentials):
             return URL.create(
                 drivername=self._get_connector(),
                 database=self.database_name,
+                query=self.dbapi_args,
             )
         else:
             if not self.use_get_cluster_credentials:
@@ -375,6 +387,7 @@ class SQLAlchemyDatabase(Credentials):
                     username=user_id,
                     password=password,
                     database=self.database_name,
+                    query=self.dbapi_args,
                 )
             except AttributeError:
                 return URL(
@@ -384,7 +397,7 @@ class SQLAlchemyDatabase(Credentials):
                     username=user_id,
                     password=password,
                     database=self.database_name,
-                    query={},
+                    query=self.dbapi_args,
                 )
 
     def get_engine(self) -> Engine:
@@ -421,7 +434,7 @@ class SQLAlchemyDatabase(Credentials):
                     # from bi_etl.utility import dict_to_str
                     # print(dict_to_str(kw))
                     if self._now() >= self._rs_credential_expiry:
-                        log.info(
+                        log.debug(
                             f'connect: Calling Redshift get_cluster_credentials since it is after {self._rs_credential_expiry}'
                         )
                         db_user, password = self.get_cluster_credentials()
@@ -443,7 +456,7 @@ class SQLAlchemyDatabase(Credentials):
                     listen for the 'checkout' event
                     """
                     if self._now() >= self._rs_credential_expiry:
-                        log.info(
+                        log.debug(
                             f'checkout: Disconnecting pool engine since it is after {self._rs_credential_expiry}'
                         )
                         raise DisconnectionError(f"Credentials expired")
@@ -451,26 +464,94 @@ class SQLAlchemyDatabase(Credentials):
                         log.debug(
                             f'checkout: Engine still valid. Good until {self._rs_credential_expiry}'
                         )
+
+                    try:
+                        with dbapi_connection.cursor() as cur:
+                            cur.execute("SELECT 1")
+                        log.debug(
+                            'checkout: Query ping OK'
+                        )
+                    except Exception as err:
+                        log.debug(
+                            f"checkout: Query ping failed with {err}. Disconnect"
+                        )
+                        raise DisconnectionError(f"Ping error: {err}")
                 # End engine receive_checkout
 
                 @event.listens_for(self._engine, 'engine_connect')
-                def receive_engine_connect(conn):
+                def receive_engine_connect(connection, **kwargs):
                     """
                     listen for the 'engine_connect' event
                     """
-                    log.info(
-                        f'engine_connect: Creds expire {self._rs_credential_expiry} for {conn}'
+                    log.debug(
+                        f'engine_connect: Creds expire {self._rs_credential_expiry}'
                     )
+                    # https://docs.sqlalchemy.org/en/20/core/pooling.html#pool-disconnects-pessimistic
+                    try:
+                        # run a SELECT 1.   use a core select() so that
+                        # the SELECT of a scalar value without a table is
+                        # appropriately formatted for the backend
+                        connection.scalar(select(1))
+                        log.debug(
+                            'engine_connect: Query ping OK'
+                        )
+                    except DBAPIError as err:
+                        # catch SQLAlchemy's DBAPIError, which is a wrapper
+                        # for the DBAPI's exception.  It includes a .connection_invalidated
+                        # attribute which specifies if this connection is a "disconnect"
+                        # condition, which is based on inspection of the original exception
+                        # by the dialect in use.
+                        log.warning(
+                            f"engine_connect: Query ping failed with {err}"
+                        )
+                        if err.connection_invalidated:
+                            # run the same SELECT again - the connection will re-validate
+                            # itself and establish a new connection.  The disconnect detection
+                            # here also causes the whole connection pool to be invalidated
+                            # so that all stale connections are discarded.
+                            connection.scalar(select(1))
+                            log.debug(
+                                f"engine_connect: Query second ping OK"
+                            )
+                        else:
+                            log.error(
+                                f"engine_connect: Connection was not invalidated with {err}"
+                            )
+                            raise
+                # End receive_engine_connect
 
-                @event.listens_for(self._engine, 'engine_disposed')
-                def receive_engine_connect(conn):
-                    """
-                    listen for the 'engine_connect' event
-                    """
-                    log.info(
-                        f'engine_disposed: Creds expire {self._rs_credential_expiry} for {conn}'
-                    )
+                # @event.listens_for(self._engine, 'engine_disposed')
+                # def receive_engine_disposed(engine):
+                #     """
+                #     listen for the 'engine_disposed' event
+                #     """
+                #     log.debug(
+                #         f'engine_disposed: Creds expire {self._rs_credential_expiry}'
+                #     )
 
+                @event.listens_for(self._engine, "handle_error")
+                def handle_exception(context: ExceptionContext) -> None:
+                    """
+                    sqlalchemy-redshift Version: 1.0.0 does not catch IAM Authentication errors as disconnection errors
+                    """
+                    log.debug(f"handle_error: {context.original_exception}")
+                    if not context.is_disconnect and 'IAM Authentication token has expired' in str(context.original_exception):
+                        context.invalidate_pool_on_disconnect = True
+                        context.is_disconnect = True
+                        log.error(
+                            f"handle_error: Creds expire {self._rs_credential_expiry} "
+                            f"but got error {context.original_exception}. "
+                            f"This was early by {(self._rs_credential_expiry - self._now()).total_seconds()} seconds. "
+                            "Forcing creds as expired (date in 1970)."
+                        )
+                        self._rs_credential_expiry = datetime(1970, 1, 1, tzinfo=timezone.utc)
+                        try:
+                            if context.pool_pre_ping:
+                                log.error(f"Error above was during pool_pre_ping")
+                        except AttributeError:
+                            pass
+
+                    return None
 
         return self._engine
 

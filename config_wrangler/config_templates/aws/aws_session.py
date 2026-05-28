@@ -1,5 +1,6 @@
 from typing import *
 
+from botocore.credentials import RefreshableCredentials
 from pydantic import PrivateAttr
 
 try:
@@ -57,6 +58,10 @@ class AWS_Session(Credentials):
                     aws_secret_access_key=self.get_password(),
                     region_name=self.region_name,
                 )
+            credentials = self._session.get_credentials()
+
+            print(f"Session Credentials Provider: {credentials.method}")
+            print(f"Session CredentialsRefreshable: {isinstance(credentials, RefreshableCredentials)}")
         return self._session
 
     def set_session(self, session: boto3.session.Session):
@@ -65,6 +70,25 @@ class AWS_Session(Credentials):
     @property
     def has_session(self) -> bool:
         return self._session is not None
+
+    def get_session_expiry(self):
+        credentials = self.session.get_credentials()
+
+        try:
+            return credentials._expiry_time
+        except AttributeError:
+            pass
+
+        # Use get_frozen_credentials() to ensure you are looking at the current set
+        try:
+            current_creds = credentials.get_frozen_credentials()
+        except AttributeError:
+            return None
+
+        if hasattr(current_creds, 'expiry_time') and current_creds.expiry_time:
+            return current_creds.expiry_time
+        else:
+            return None
 
     def _get_client(self, service: str = None):
         if service is None:
