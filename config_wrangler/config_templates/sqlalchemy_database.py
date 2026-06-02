@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import model_validator, PrivateAttr
 
+from config_wrangler.config_templates.aws.aws_session import AWS_Session
+
 try:
     # noinspection PyPackageRequirements
     from sqlalchemy.engine import Engine, ExceptionContext
@@ -176,10 +178,12 @@ class SQLAlchemyDatabase(Credentials):
 
     # Private attribute used to hold the engine
     _engine: 'Engine' = PrivateAttr(default=None)
+    # noinspection PyUnresolvedReferences
     _sqlite_connection: 'sqlalchemy.engine.base.Connection' = PrivateAttr(default=None)
     # Private attribute used to hold the redshift client
     _rs_client: 'RedshiftClient' = PrivateAttr(default=None)
     _rs_credential_expiry: datetime = PrivateAttr(default=None)
+    _rs_session: AWS_Session = PrivateAttr(default=None)
 
     # Values to hide from config exports
     _private_value_atts: set[str] = PrivateAttr(default={'password', 'aws_secret_access_key'})
@@ -296,6 +300,10 @@ class SQLAlchemyDatabase(Credentials):
         if self.rs_db_groups is not None:
             extra_get_cluster_credentials_args['DbGroups'] = self.rs_db_groups
 
+        assert self.rs_db_user_id is not None
+        assert self.rs_duration_seconds is not None
+        assert self.rs_cluster_id is not None
+
         new_credentials = self._rs_client.get_cluster_credentials(
             DbUser=self.rs_db_user_id,
             DbName=self.database_name,
@@ -335,11 +343,12 @@ class SQLAlchemyDatabase(Credentials):
                 f'Will use config setting of {self.rs_new_credentials_seconds} seconds. '
                 f'Expire at {self._rs_credential_expiry}'
             )
-        iam_expiry = self._rs_session.get_session_expiry()
-        log.debug(f"IAM expiry = {iam_expiry}")
-        if iam_expiry < self._rs_credential_expiry:
-            self._rs_credential_expiry = iam_expiry
-            log.debug(f"IAM credentials expire sooner. Using that value = {iam_expiry}")
+        if self._rs_session is not None:
+            iam_expiry = self._rs_session.get_session_expiry()
+            log.debug(f"IAM expiry = {iam_expiry}")
+            if iam_expiry < self._rs_credential_expiry:
+                self._rs_credential_expiry = iam_expiry
+                log.debug(f"IAM credentials expire sooner. Using that value = {iam_expiry}")
 
         return new_credentials['DbUser'], new_credentials['DbPassword']
 
@@ -390,6 +399,7 @@ class SQLAlchemyDatabase(Credentials):
                     query=self.dbapi_args,
                 )
             except AttributeError:
+                # noinspection PyTypeChecker
                 return URL(
                     drivername=self._get_connector(),
                     host=self.host,
@@ -535,8 +545,12 @@ class SQLAlchemyDatabase(Credentials):
                     sqlalchemy-redshift Version: 1.0.0 does not catch IAM Authentication errors as disconnection errors
                     """
                     log.debug(f"handle_error: {context.original_exception}")
-                    if not context.is_disconnect and 'IAM Authentication token has expired' in str(context.original_exception):
+                    if (not context.is_disconnect
+                            and 'IAM Authentication token has expired' in str(context.original_exception)
+                    ):
+                        # noinspection PyUnresolvedReferences,PyDunderSlots
                         context.invalidate_pool_on_disconnect = True
+                        # noinspection PyUnresolvedReferences,PyDunderSlots
                         context.is_disconnect = True
                         log.error(
                             f"handle_error: Creds expire {self._rs_credential_expiry} "
@@ -546,6 +560,7 @@ class SQLAlchemyDatabase(Credentials):
                         )
                         self._rs_credential_expiry = datetime(1970, 1, 1, tzinfo=timezone.utc)
                         try:
+                            # noinspection PyUnresolvedReferences
                             if context.pool_pre_ping:
                                 log.error(f"Error above was during pool_pre_ping")
                         except AttributeError:
@@ -569,6 +584,7 @@ class SQLAlchemyDatabase(Credentials):
         Special handling for sqlite where subsequent calls will return the same connection.
         """
         if self.dialect == 'sqlite':
+            # noinspection PyUnresolvedReferences
             if self._sqlite_connection is None or self._sqlite_connection.closed:
                 self._sqlite_connection = self.get_engine().connect()
             return self._sqlite_connection

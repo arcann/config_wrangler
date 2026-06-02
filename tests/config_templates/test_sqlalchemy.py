@@ -3,6 +3,7 @@ import unittest
 import boto3
 from moto import mock_aws
 
+from config_wrangler.config_templates.password_source import PasswordSource
 from tests.base_tests_mixin import Base_Tests_Mixin
 
 
@@ -36,7 +37,7 @@ class TestSQLAlchemyDatabase(unittest.TestCase, Base_Tests_Mixin):
             rs_region_name='us-east-1',
             rs_cluster_id=self.cluster_identifier,
             rs_db_user_id='mock_user',
-            password_source='CONFIG_FILE',
+            password_source=PasswordSource.CONFIG_FILE,
             user_id='my_access_key',
             raw_password='my_secret_key',
         )
@@ -64,7 +65,7 @@ class TestSQLAlchemyDatabase(unittest.TestCase, Base_Tests_Mixin):
             rs_auto_create=True,
             rs_db_user_id='mock_user',
             rs_db_groups=['group1', 'group2'],
-            password_source='CONFIG_FILE',
+            password_source=PasswordSource.CONFIG_FILE,
             user_id='my_access_key',
             raw_password='my_secret_key',
         )
@@ -89,7 +90,7 @@ class TestSQLAlchemyDatabase(unittest.TestCase, Base_Tests_Mixin):
             database_name='db_1',
             rs_region_name='us-east-1',
             rs_cluster_id=self.cluster_identifier,
-            password_source='CONFIG_FILE',
+            password_source=PasswordSource.CONFIG_FILE,
             user_id='db_user_id',
             raw_password='my_password',
         )

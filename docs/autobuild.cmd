@@ -1,1 +1,1 @@
-poetry run sphinx-autobuild .\source\ .\build\ --watch ..\config_wrangler\ --port 8001 --open-browser
+uv run --group docs sphinx-autobuild .\source\ .\build\ --watch ..\config_wrangler\ --port 8001 --open-browser

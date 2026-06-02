@@ -1,0 +1,47 @@
+name: Deploy Sphinx Docs to Pages
+
+on:
+  push:
+    branches: [ "master" ] # Triggers the build whenever you push to master
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment to avoid conflicting updates
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Install the latest version of uv and set the python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: 3.14
+
+      - name: Build Sphinx HTML
+        run: |
+          # Creates a blank file so GitHub Pages doesn't ignore folders starting with underscores
+          touch docs/source/.nojekyll 
+          uv run --group docs sphinx-build -b html docs/source docs/build/html
+
+      # bundle workspace into a zipped tarball
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build/html # Path to where your compiled HTML index.html lives
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

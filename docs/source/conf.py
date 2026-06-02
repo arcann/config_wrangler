@@ -14,9 +14,9 @@ import config_wrangler.config_templates.aws.dynamodb
 
 
 package_root = Path(__file__).parents[2].absolute()
-poetry_config = toml.load(str(package_root / 'pyproject.toml'))
+pyproject_data = toml.load(str(package_root / 'pyproject.toml'))
 
-full_version = poetry_config['tool']['poetry']['version']
+full_version = pyproject_data['project']['version']
 
 version_parts = full_version.split('.')
 
@@ -26,8 +26,9 @@ version_1_2 = '.'.join(version_parts[:2])
 version = version_1_2
 release = full_version
 
-author = ', '.join(poetry_config['tool']['poetry']['authors'])
-project = poetry_config['tool']['poetry']['name']
+authors = pyproject_data['project']['authors']
+author = ', '.join([a['name'] for a in authors])
+project = pyproject_data['project']['name']
 copyright = f'2022, {author}'  # @ReservedAssignment
 
 #
@@ -109,7 +110,7 @@ master_doc = 'index'
 autodoc_pydantic_model_show_json = False
 autodoc_pydantic_settings_show_json = False
 autodoc_pydantic_model_show_config_member = False
-autodoc_pydantic_model_summary_list_order = 'bysource'
+autodoc_pydantic_model_summary_list_order = 'alphabetical'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

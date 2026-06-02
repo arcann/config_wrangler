@@ -55,6 +55,7 @@ dev = [
     "pyyaml>=6.0.3",
 ]
 docs = [
+    "config-wrangler[sqlalchemy]",
     "Sphinx>=7.2.6,<8",
     "sphinx-pydantic>=0.1.1",
     "autodoc-pydantic>=2",
