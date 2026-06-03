@@ -7,11 +7,11 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
-   config_wrangler.config_data_loaders.base_config_data_loader
-   config_wrangler.config_data_loaders.env_config_data_loader
-   config_wrangler.config_data_loaders.file_config_data_loader
-   config_wrangler.config_data_loaders.ini_config_data_loader
-   config_wrangler.config_data_loaders.toml_config_data_loader
+   base_config_data_loader <config_wrangler.config_data_loaders.base_config_data_loader>
+   env_config_data_loader <config_wrangler.config_data_loaders.env_config_data_loader>
+   file_config_data_loader <config_wrangler.config_data_loaders.file_config_data_loader>
+   ini_config_data_loader <config_wrangler.config_data_loaders.ini_config_data_loader>
+   toml_config_data_loader <config_wrangler.config_data_loaders.toml_config_data_loader>
 
 Module contents
 ---------------

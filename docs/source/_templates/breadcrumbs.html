@@ -1,0 +1,22 @@
+{#- Custom breadcrumbs to use last part of each fully.qualified.page_name -#}
+<div role="navigation" aria-label="{{ _('Page navigation') }}">
+  <ul class="wy-breadcrumbs">
+    {% block breadcrumbs %}
+      <li><a href="{{ pathto(master_doc) }}" class="icon icon-home" aria-label="Home"></a></li>
+      {% for doc in parents %}
+        {% set clean_docname = doc.link | replace('.html', '') %}
+        {% set short_name = clean_docname.split('.') | last %}
+        <li class="breadcrumb-item"><a href="{{ doc.link|e }}">{{ short_name }}</a></li>
+      {% endfor %}
+
+      {% set short_name = title.split('.') | last %}
+      <li class="breadcrumb-item active">{{ short_name }}</li>
+    {% endblock %}
+
+    {% block breadcrumbs_aside %}
+      {#- Retain default sidebar links like 'View page source' if they exist -#}
+      {% include "breadcrumbs_aside.html" ignore missing %}
+    {% endblock %}
+  </ul>
+  <hr/>
+</div>

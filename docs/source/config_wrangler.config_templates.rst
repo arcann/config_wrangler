@@ -7,7 +7,7 @@ Subpackages
 .. toctree::
    :maxdepth: 1
 
-   config_wrangler.config_templates.aws
+   aws <config_wrangler.config_templates.aws>
 
 Submodules
 ----------
@@ -15,13 +15,13 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
-   config_wrangler.config_templates.config_hierarchy
-   config_wrangler.config_templates.credentials
-   config_wrangler.config_templates.keepass_config
-   config_wrangler.config_templates.logging_config
-   config_wrangler.config_templates.password_defaults
-   config_wrangler.config_templates.password_source
-   config_wrangler.config_templates.sqlalchemy_database
+   config_hierarchy <config_wrangler.config_templates.config_hierarchy>
+   credentials <config_wrangler.config_templates.credentials>
+   keepass_config <config_wrangler.config_templates.keepass_config>
+   logging_config <config_wrangler.config_templates.logging_config>
+   password_defaults <config_wrangler.config_templates.password_defaults>
+   password_source <config_wrangler.config_templates.password_source>
+   sqlalchemy_database <config_wrangler.config_templates.sqlalchemy_database>
 
 
 Module contents

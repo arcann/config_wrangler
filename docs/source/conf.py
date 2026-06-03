@@ -1,4 +1,8 @@
 # conf.py
+import inspect
+from importlib.abc import FileLoader
+
+from sphinx.util import logging
 from pathlib import Path
 
 import toml
@@ -6,11 +10,13 @@ import toml
 # Work around dynamic import issue
 # https://github.com/pydantic/pydantic/discussions/7763
 
-import config_wrangler.config_templates.logging_config
-import config_wrangler.config_templates.credentials
-import config_wrangler.config_templates.sqlalchemy_database
-import config_wrangler.config_templates.aws.s3_bucket
-import config_wrangler.config_templates.aws.dynamodb
+# import config_wrangler.config_templates.logging_config
+# import config_wrangler.config_templates.credentials
+# import config_wrangler.config_templates.sqlalchemy_database
+# import config_wrangler.config_templates.aws.s3_bucket
+# import config_wrangler.config_templates.aws.dynamodb
+
+import pydantic
 
 
 package_root = Path(__file__).parents[2].absolute()
@@ -352,3 +358,35 @@ def rst_link_transform(docname):
     if docname in ('', 'index'):
         return 'Home'
     return docname.title()
+
+
+def skip_inherited(app, what, name, obj, skip, options):
+    if name == '__builtins__' or obj is None:
+        return True
+
+    if skip:
+        return True
+
+    if isinstance(obj, str):
+        module_name = obj
+    elif isinstance(obj, FileLoader):
+        module_name = obj.path
+    else:
+        module = inspect.getmodule(obj)
+        if module is not None:
+            module_name = module.__name__
+        else:
+            return True
+
+    logger = logging.getLogger('skip_inherited')
+    if 'config_wrangler' in module_name:
+        # logger.debug(f"INCLUDING: {what} {name}: repr= {obj!r} module_name = {module_name}")
+        return False
+    else:
+        # logger.info(f"SKIPPING: {what} {name}: repr= {obj!r} module_name = {module_name}")
+        return True
+
+
+def setup(app):
+    print("SETUP app with skip_inherited")
+    app.connect('autodoc-skip-member', skip_inherited)

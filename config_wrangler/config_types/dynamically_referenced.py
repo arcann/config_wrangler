@@ -77,7 +77,8 @@ class DynamicFieldInfo(DelimitedListFieldInfo):
 
     @staticmethod
     def from_field(default: Any = PydanticUndefined, **kwargs: Unpack[_FromFieldInfoInputs]) -> DynamicFieldInfo:
-        """Create a new `FieldInfo` object with the `Field` function.
+        """
+        Create a new `FieldInfo` object with the `Field` function.
 
         Args:
             default: The default value for the field. Defaults to Undefined.
@@ -90,7 +91,7 @@ class DynamicFieldInfo(DelimitedListFieldInfo):
             A new FieldInfo object with the given parameters.
 
         Example:
-            This is how you can create a field with default value like this:
+            This is how you can create a field with default value
 
             ```python
             import pydantic

@@ -7,10 +7,10 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
-   config_wrangler.config_types.delimited_field
-   config_wrangler.config_types.dynamically_referenced
-   config_wrangler.config_types.enum
-   config_wrangler.config_types.path_types
+   delimited_field <config_wrangler.config_types.delimited_field>
+   dynamically_referenced <config_wrangler.config_types.dynamically_referenced>
+   enum <config_wrangler.config_types.enum>
+   path_types <config_wrangler.config_types.path_types>
 
 Module contents
 ---------------

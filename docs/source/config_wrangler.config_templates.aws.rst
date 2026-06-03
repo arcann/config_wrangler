@@ -7,9 +7,9 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
-   config_wrangler.config_templates.aws.aws_session
-   config_wrangler.config_templates.aws.dynamodb
-   config_wrangler.config_templates.aws.s3_bucket
+   aws_session <config_wrangler.config_templates.aws.aws_session>
+   dynamodb <config_wrangler.config_templates.aws.dynamodb>
+   s3_bucket <config_wrangler.config_templates.aws.s3_bucket>
 
 Module contents
 ---------------
