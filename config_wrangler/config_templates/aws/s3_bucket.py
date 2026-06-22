@@ -37,8 +37,10 @@ if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
 
     # https://youtype.github.io/boto3_stubs_docs/mypy_boto3_s3/service_resource/
+    # https://pypi.org/project/mypy-boto3-s3/#how-to-install
     from mypy_boto3_s3.service_resource import Bucket
     from mypy_boto3_s3.service_resource import Object
+    from mypy_boto3_s3.service_resource import ObjectVersion
     from mypy_boto3_s3.service_resource import ObjectSummary
     from mypy_boto3_s3.service_resource import BucketObjectsCollection
     from mypy_boto3_s3.service_resource import S3ServiceResource
@@ -49,6 +51,12 @@ if TYPE_CHECKING:
 #       (Help > Edit Custom Properties), then restart.
 
 local_timezone = datetime.now(timezone.utc).astimezone().tzinfo
+
+
+class OverwriteModes(Enum):
+    ALWAYS_OVERWRITE = auto()
+    OVERWRITE_OLDER = auto()
+    NEVER_OVERWRITE = auto()
 
 
 class S3ClientError(ClientError):
@@ -70,15 +78,12 @@ class S3ClientError(ClientError):
 # noinspection PyPep8Naming
 class S3_Bucket(AWS_Session):
     bucket_name: str
-    key: Optional[str] = None
+    key: str | None = None
     treat_as_folder: bool = False
 
     _service: str = PrivateAttr(default='s3')
 
-    class OverwriteModes(Enum):
-        ALWAYS_OVERWRITE = auto()
-        OVERWRITE_OLDER = auto()
-        NEVER_OVERWRITE = auto()
+    OverwriteModes: ClassVar[type[OverwriteModes]] = OverwriteModes
 
     def __str__(self):
         key = self._get_key()
@@ -87,8 +92,18 @@ class S3_Bucket(AWS_Session):
         else:
             return f"s3://{self.bucket_name}/{key}"
 
+    def __repr__(self):
+        return f"S3_Bucket(bucket_name={self.bucket_name}, {self.key=}. {self.treat_as_folder=})"
+
     def __hash__(self):
         return hash(str(self))
+
+    def __eq__(self, other) -> bool:
+        if self.bucket_name != other.bucket_name:
+            return False
+        if self.key != other.key:
+            return False
+        return True
 
     @property
     def resource(self) -> 'S3ServiceResource':
@@ -107,6 +122,7 @@ class S3_Bucket(AWS_Session):
 
     @staticmethod
     def _boto3_error(ex: ClientError) -> str:
+        # noinspection PyTypeChecker
         return ex.response.get('Error', {}).get('Code')
 
     @staticmethod
@@ -141,7 +157,10 @@ class S3_Bucket(AWS_Session):
         return S3_Bucket._get_bucket_region(self.client, self.bucket_name)
 
     @staticmethod
-    def _non_blank_key(key: str):
+    def _non_blank_key(key: str | PurePosixPath | None):
+        if key is None:
+            return False
+
         key_str = str(key).strip()
         if key is None or key_str in {'', '/'}:
             return False
@@ -149,7 +168,7 @@ class S3_Bucket(AWS_Session):
             return True
 
     @staticmethod
-    def _is_blank_key(key: str):
+    def _is_blank_key(key: str | PurePosixPath | None):
         return not S3_Bucket._non_blank_key(key)
 
     def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
@@ -159,13 +178,16 @@ class S3_Bucket(AWS_Session):
             elif self._is_blank_key(self.key):
                 key = ''
             else:
-                key = self.key
+                assert self.key is not None
+                key = str(self.key)
         else:
             if self._is_blank_key(self.key):
                 key = extra_key
             else:
+                assert self.key is not None
                 key = str(PurePosixPath(self.key) / extra_key)
 
+        # noinspection PyTypeChecker
         return key
 
     class CompareResult(Enum):
@@ -176,11 +198,16 @@ class S3_Bucket(AWS_Session):
 
     @staticmethod
     def _compare_object_to_file(
-            bucket_object: Union['Object', 'ObjectSummary'],
+            bucket_object: 'Union[Object, ObjectSummary]',
             local_filename: Path,
     ) -> CompareResult:
         s3_last_modified = bucket_object.last_modified
-        s3_file_size = bucket_object.content_length
+        try:
+            # noinspection PyUnresolvedReferences
+            s3_file_size = bucket_object.content_length
+        except AttributeError:
+            # noinspection PyUnresolvedReferences
+            s3_file_size = bucket_object.size
 
         local_stats = local_filename.stat()
         local_last_modified = datetime.fromtimestamp(
@@ -211,12 +238,12 @@ class S3_Bucket(AWS_Session):
         if transfer_config is None:
             transfer_config = TransferConfig(multipart_threshold=5 * (1024**3))  # 5 GB
 
-        if overwrite_mode == S3_Bucket.OverwriteModes.ALWAYS_OVERWRITE:
+        if overwrite_mode == OverwriteModes.ALWAYS_OVERWRITE:
             do_upload = True
         else:
             try:
                 bucket_object = self.get_object(key)
-                if overwrite_mode == S3_Bucket.OverwriteModes.NEVER_OVERWRITE:
+                if overwrite_mode == OverwriteModes.NEVER_OVERWRITE:
                     do_upload = False
                 else:
                     local_filename = Path(local_filename)
@@ -261,7 +288,7 @@ class S3_Bucket(AWS_Session):
                 as_text = False
 
         body: StreamingBody = self.get_object().get()['Body']
-        # noinspection PyProtectedMember,PyTypeChecker
+        # noinspection PyProtectedMember,PyTypeChecker,PyUnresolvedReferences
         bytes_stream = io.BufferedReader(body._raw_stream, 8192)
 
         if as_text:
@@ -283,17 +310,20 @@ class S3_Bucket(AWS_Session):
 
     def copy_to(
             self,
-            target: Union[str, 'S3_Bucket_Key']
+            target: Union[str, 'S3_Bucket_Key'],
+            version_id: str | None = None,
     ):
         if isinstance(target, str):
             target = self._build_s3_bucket_key(target)
         self_key = self._get_key()
+        # noinspection PyTypeChecker
         self.client.copy_object(
             Bucket=target.bucket_name,
             Key=target.key,
             CopySource=dict(
                 Bucket=self.bucket_name,
                 Key=self_key,
+                VersionId=version_id,
             )
         )
 
@@ -310,9 +340,10 @@ class S3_Bucket(AWS_Session):
             transfer_config: Optional[TransferConfig] = None,
             create_parents: bool = True,
             overwrite_mode: OverwriteModes = OverwriteModes.OVERWRITE_OLDER,
-            _bucket_object_summary: 'ObjectSummary' = None,
+            _bucket_object_summary: 'ObjectSummary | None' = None,
     ):
         if self._non_blank_key(key):
+            assert key is not None
             file_obj = self / key
             file_obj.download_file(
                 local_filename=local_filename,
@@ -329,9 +360,9 @@ class S3_Bucket(AWS_Session):
                 local_path.parent.mkdir(parents=True, exist_ok=True)
 
             try:
-                if overwrite_mode in {S3_Bucket.OverwriteModes.OVERWRITE_OLDER, S3_Bucket.OverwriteModes.NEVER_OVERWRITE}:
+                if overwrite_mode in {OverwriteModes.OVERWRITE_OLDER, OverwriteModes.NEVER_OVERWRITE}:
                     if local_path.exists():
-                        if overwrite_mode == S3_Bucket.OverwriteModes.NEVER_OVERWRITE:
+                        if overwrite_mode == OverwriteModes.NEVER_OVERWRITE:
                             do_download = False
                             log.info(f"{self} download to {local_path} skipped since file exists and mode = {overwrite_mode}")
                         else:  # Check ages and size
@@ -395,13 +426,14 @@ class S3_Bucket(AWS_Session):
             *,
             local_path: Union[str, Path],
             key: Optional[Union[str, PurePosixPath]] = None,
-            treat_as_folder: bool = None,
+            treat_as_folder: bool | None = None,
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
             create_parents: bool = True,
             overwrite_mode: OverwriteModes = OverwriteModes.OVERWRITE_OLDER,
     ) -> Iterable[Path]:
         if self._non_blank_key(key):
+            assert key is not None
             file_obj = self / key
             return file_obj.download_files(
                 local_path=local_path,
@@ -419,6 +451,7 @@ class S3_Bucket(AWS_Session):
             full_key = self._get_key()
             base_path = PurePosixPath(full_key)
             for s3_object in self.list_objects(treat_as_folder=treat_as_folder):
+                assert s3_object.key is not None
                 s3_object_path = PurePosixPath(s3_object.key)
                 try:
                     relative_key = s3_object_path.relative_to(base_path)
@@ -437,11 +470,19 @@ class S3_Bucket(AWS_Session):
                 )
             return results
 
-    def exists(self, key: Optional[Union[str, PurePosixPath]] = None) -> bool:
+    def exists(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+    ) -> bool:
         key = self._get_key(key)
 
+        extra_args = {}
+        if version_id is not None:
+            extra_args['VersionId'] = version_id
+
         try:
-            self.client.head_object(Bucket=self.bucket_name, Key=str(key))
+            self.client.head_object(Bucket=self.bucket_name, Key=str(key), **extra_args)
             return True
         except ClientError as ex:
             if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
@@ -457,18 +498,30 @@ class S3_Bucket(AWS_Session):
         )
         return self.exists(key)
 
-    def get_object_uncached(self, key: Optional[Union[str, PurePosixPath]] = None) -> 'Object':
+    def get_object_uncached(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+    ) -> 'Object | ObjectVersion':
         key = self._get_key(key)
-        return self.resource.Object(self.bucket_name, str(key))
+        obj = self.resource.Object(self.bucket_name, str(key))
+        if version_id is None:
+            return obj
+        else:
+            return obj.Version(version_id)
 
     @cached(cache=TTLCache(maxsize=1024, ttl=10))
-    def get_object(self, key: Optional[Union[str, PurePosixPath]] = None) -> 'Object':
-        return self.get_object_uncached(key)
+    def get_object(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+    ) -> 'Object':
+        return self.get_object_uncached(key, version_id=version_id)
 
     def delete(
             self,
             key: Optional[Union[str, PurePosixPath]] = None,
-            version_id: str = None,
+            version_id: str | None = None,
     ):
         key = self._get_key(key)
         kwargs = {
@@ -479,9 +532,14 @@ class S3_Bucket(AWS_Session):
             kwargs['VersionId'] = version_id
         self.client.delete_object(**kwargs)
 
-    def unlink(self, missing_ok=False):
+    def unlink(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+            missing_ok=False,
+    ):
         try:
-            self.delete()
+            self.delete(key=key, version_id=version_id)
         except ClientError as ex:
             if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
                 if not missing_ok:
@@ -492,7 +550,7 @@ class S3_Bucket(AWS_Session):
     def delete_by_key(
             self,
             key: Union[str, PurePosixPath],
-            version_id: str = None,
+            version_id: str | None = None,
     ):
         warnings.warn(
             'The `delete_by_key` method is deprecated; use `delete` instead.',
@@ -504,7 +562,7 @@ class S3_Bucket(AWS_Session):
     def list_objects(
             self,
             key: Optional[Union[str, PurePosixPath]] = None,
-            treat_as_folder: bool = None,
+            treat_as_folder: bool | None = None,
     ) -> 'BucketObjectsCollection':
         log = logging.getLogger(f"{__name__}.list_objects")
         if treat_as_folder is None and key is not None:
@@ -530,7 +588,10 @@ class S3_Bucket(AWS_Session):
                 raise S3ClientError(f"{self} with key={key} list_objects yielded error {ex}", ex)
         return collection
 
-    def find_objects(self, key: Union[str, PurePosixPath] = None) -> 'BucketObjectsCollection':
+    def find_objects(
+            self,
+            key: str | PurePosixPath | None = None,
+    ) -> 'BucketObjectsCollection':
         warnings.warn(
             'The `find_objects` method is deprecated; use `list_objects` instead.',
             DeprecationWarning,
@@ -541,15 +602,15 @@ class S3_Bucket(AWS_Session):
     def list_object_keys(
             self,
             key: Optional[Union[str, PurePosixPath]] = None,
-            treat_as_folder: bool = None,
+            treat_as_folder: bool | None = None,
     ) -> List[str]:
-        obj_collection = self.list_objects(key,treat_as_folder=treat_as_folder)
+        obj_collection = self.list_objects(key, treat_as_folder=treat_as_folder)
         return [obj.key for obj in obj_collection]
 
     def list_object_paths(
             self,
             key: Optional[Union[str, PurePosixPath]] = None,
-            treat_as_folder: bool = None,
+            treat_as_folder: bool | None = None,
     ) -> List[PurePosixPath]:
         """
         Return the relative paths of objects contained in the in/under this object
@@ -568,7 +629,12 @@ class S3_Bucket(AWS_Session):
         """
         Return the S3_Bucket_Key objects contained in the in/under this object.
         """
-        return [self / key for key in self.list_object_paths(treat_as_folder=True)]
+        resolved_key = self._get_key()
+        for obj in self.list_objects(treat_as_folder=True):
+            bucket_key = self._build_s3_bucket_key(key=obj.key)
+            bucket_key._last_modified = obj.last_modified
+            bucket_key._size = obj.size
+            yield bucket_key
 
     @staticmethod
     def _path_to_key(path: PurePosixPath):
@@ -651,7 +717,7 @@ class S3_Bucket(AWS_Session):
     # https://www.tecracer.com/blog/2023/01/what-are-the-folders-in-the-s3-console.html
 
     def __truediv__(
-            self, other: Union[str, PurePath]
+            self, other: Union[str, PurePosixPath]
     ) -> 'S3_Bucket_Key':
         key = self._get_key(other)
         return self._build_s3_bucket_key(key, treat_as_folder=True)
@@ -667,6 +733,7 @@ class S3_Bucket(AWS_Session):
         new_path = self
         for other in others:
             new_path = new_path / other
+        # noinspection PyTypeChecker
         return new_path
 
     def _build_s3_bucket_folder(self, folder: Union[str, Path]):
@@ -676,7 +743,7 @@ class S3_Bucket(AWS_Session):
             folder=str(folder)
         )
 
-    def _build_s3_bucket_folder_file(self, file_name: Union[str, Path], folder: Union[str, Path] = None):
+    def _build_s3_bucket_folder_file(self, file_name: Union[str, Path], folder: Union[str, Path] | None = None):
         if folder is None:
             return self._factory(
                 S3_Bucket_Folder_File,
@@ -693,10 +760,12 @@ class S3_Bucket(AWS_Session):
 
     def _build_s3_bucket_key(
             self,
-            key: Union[str, Path],
-            treat_as_folder: bool = None,
+            key: Union[str, Path, PurePath],
+            treat_as_folder: bool | None = None,
     ):
-        s3_key_obj =  self._factory(S3_Bucket_Key, key=str(key), exclude={'folder', 'file_name'})
+        s3_key_obj = self._factory(
+            S3_Bucket_Key, key=str(key), exclude={'folder', 'file_name'}
+        )
         if treat_as_folder is not None:
             s3_key_obj.treat_as_folder = treat_as_folder
         return s3_key_obj
@@ -709,6 +778,8 @@ class S3_Bucket_Key(S3_Bucket):
     Similar to S3_Bucket but the key is required
     """
     key: str
+    _last_modified: datetime = PrivateAttr(default=None)
+    _size: int = PrivateAttr(default=None)
 
     # Note the order of decorators matters!
     # noinspection PyMethodParameters,PyNestedDecorators
@@ -720,9 +791,84 @@ class S3_Bucket_Key(S3_Bucket):
             v = str(v)
         return v
 
+    def __repr__(self):
+        return f"S3_Bucket_Key(bucket_name={self.bucket_name}, {self.key=}. {self.treat_as_folder=})"
+
+    @property
+    def last_modified(self) -> datetime:
+        if self._last_modified is None:
+            obj = self.get_object()
+            self._last_modified = obj.last_modified
+            self._size = obj.size
+        return self._last_modified
+
+    @property
+    def size(self) -> int:
+        if self._size is None:
+            obj = self.get_object()
+            self._last_modified = obj.last_modified
+            self._size = obj.size
+        return self._size
+
+    def iter_versions(self) -> Iterator['S3_Bucket_Key_Version']:
+        """
+        Iterate over all versions of this S3 object key.
+
+        Yields S3_Bucket_Key_Version objects for each version that exists in S3.
+        Versions are returned in the order provided by S3 (typically newest first).
+
+        Raises:
+            ClientError: If there's an error accessing the S3 bucket or versions.
+        """
+        key = self._get_key()
+        try:
+            paginator = self.client.get_paginator('list_object_versions')
+            page_iterator = paginator.paginate(
+                Bucket=self.bucket_name,
+                Prefix=key,
+            )
+
+            for page in page_iterator:
+                versions = page.get('Versions', [])
+                for version_data in versions:
+                    if version_data['Key'] == key:
+                        obj = self._factory(
+                            S3_Bucket_Key_Version,
+                            key=key,
+                            version_id=version_data['VersionId'],
+                            is_latest=version_data.get('IsLatest', False),
+                        )
+                        obj._last_modified = version_data.get('LastModified')
+                        obj._size = version_data.get('Size')
+                        yield obj
+
+        except ClientError as ex:
+            if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
+                raise S3ClientError(f"{self} does not exist or bucket versioning not enabled", ex)
+            else:
+                raise S3ClientError(f"{self} iter_versions yielded error {ex}", ex)
+
+    def latest_version(self) -> 'S3_Bucket_Key_Version':
+        latest_versions = [v for v in self.iter_versions() if v.is_latest]
+        if len(latest_versions) == 0:
+            raise FileNotFoundError(f"No latest version found for {self}")
+        if len(latest_versions) > 1:
+            raise FileNotFoundError(f"Multiple latest version found for {self}")
+        return latest_versions[0]
+
+    def version_map(self) -> dict[str, 'S3_Bucket_Key_Version']:
+        return {v.version_id: v for v in self.iter_versions()}
+
+    def version(self, version_id: str) -> 'S3_Bucket_Key_Version':
+        version_map = self.version_map()
+        try:
+            return version_map[version_id]
+        except KeyError:
+            raise FileNotFoundError(f"No version found for {self} + version_id = {version_id}")
+
     def upload_specified_file(
             self,
-            local_filename: Union[str, PurePosixPath],
+            local_filename: Union[str, Path],
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
     ):
@@ -739,7 +885,7 @@ class S3_Bucket_Key(S3_Bucket):
 
     def download_specified_file(
             self,
-            local_filename: Union[str, PurePosixPath],
+            local_filename: Union[str, Path],
             extra_args: Optional[dict] = None,
             transfer_config: Optional[TransferConfig] = None,
             create_parents: bool = True,
@@ -758,6 +904,114 @@ class S3_Bucket_Key(S3_Bucket):
 
 
 # noinspection PyPep8Naming
+class S3_Bucket_Key_Version(S3_Bucket_Key):
+    """
+    Represents a specific version of an S3 object key.
+    Extends S3_Bucket_Key with version_id to uniquely identify a version.
+    """
+    version_id: str
+    is_latest: bool = False
+    treat_as_folder: bool = False
+
+    def __str__(self):
+        key = self._get_key()
+        return f"s3://{self.bucket_name}/{key}?versionId={self.version_id}"
+
+    def __repr__(self):
+        return f"S3_Bucket_Key_Version(bucket_name={self.bucket_name}, {self.key=}. {self.version_id=})"
+
+    def __eq__(self, other) -> bool:
+        if not super().__eq__(other):
+            return False
+        if self.version_id != other.version_id:
+            return False
+        return True
+
+    def get_object_uncached(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+    ) -> 'Object | ObjectVersion':
+        """Get the versioned object from S3."""
+        if version_id is None:
+            return super().get_object_uncached(self.key, version_id=self.version_id)
+        else:
+            # Override the version_id stored in self
+            return super().get_object_uncached(self.key, version_id=version_id)
+
+    def exists(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+    ) -> bool:
+        if version_id is None:
+            return super().exists(self.key, version_id=self.version_id)
+        else:
+            # Override the version_id stored in self
+            return super().exists(self.key, version_id=version_id)
+
+    def delete(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+    ):
+        if version_id is None:
+            super().delete(self.key, version_id=self.version_id)
+        else:
+            # Override the version_id stored in self
+            super().delete(self.key, version_id=version_id)
+
+    def unlink(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+            missing_ok=False,
+    ):
+        if version_id is None:
+            super().unlink(self.key, version_id=self.version_id, missing_ok=missing_ok)
+        else:
+            # Override the version_id stored in self
+            super().unlink(self.key, version_id=version_id, missing_ok=missing_ok)
+
+    def download_file(
+            self,
+            *,
+            local_filename: Union[str, Path],
+            key: Optional[Union[str, PurePosixPath]] = None,
+            extra_args: Optional[dict] = None,
+            transfer_config: Optional[TransferConfig] = None,
+            create_parents: bool = True,
+            overwrite_mode: OverwriteModes = OverwriteModes.OVERWRITE_OLDER,
+            _bucket_object_summary: 'ObjectSummary | None' = None,
+    ):
+        if extra_args is None:
+            extra_args = {}
+        if 'VersionId' not in extra_args:
+            extra_args['VersionId'] = self.version_id
+
+        super().download_file(
+            local_filename=local_filename,
+            key=key,
+            extra_args=extra_args,
+            transfer_config=transfer_config,
+            create_parents=create_parents,
+            overwrite_mode=overwrite_mode,
+            _bucket_object_summary=_bucket_object_summary,
+        )
+
+    def copy_to(
+            self,
+            target: Union[str, 'S3_Bucket_Key'],
+            version_id: str | None = None,
+    ):
+        if version_id is None:
+            super().copy_to(target=target, version_id=self.version_id)
+        else:
+            # Override the version_id stored in self
+            super().copy_to(target=target, version_id=version_id)
+
+
+# noinspection PyPep8Naming
 class S3_Bucket_Folder(S3_Bucket):
     """
         Represents a folder within an S3 bucket.
@@ -773,10 +1027,13 @@ class S3_Bucket_Folder(S3_Bucket):
         # Handle pathlib values
         if not isinstance(v, str):
             v = str(v)
-        if len(v) == 0:
-            # Treat as root folder
-            v = '/'
+        if v == '/':
+            # Root folder is blank key in S3
+            v = ''
         return v
+
+    def __repr__(self):
+        return f"S3_Bucket_Folder(bucket_name={self.bucket_name}, {self.folder=})"
 
     def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
         folder_key = self.folder.lstrip('/')
@@ -854,8 +1111,14 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
         if not isinstance(v, str):
             v = str(v)
         if len(v) == 0:
-            raise ConfigError(f"Zero length string not a valid file_name")
+            raise ConfigError("Zero length string not a valid file_name")
         return v
+
+    def model_post_init(self, __context: Any) -> None:
+        self.key = self._get_key()
+
+    def __repr__(self):
+        return f"S3_Bucket_Folder_File({self.bucket_name=}, {self.folder=}, {self.file_name=})"
 
     def _get_key(self, extra_key: Optional[Union[str, PurePosixPath]] = None) -> str:
         if self._non_blank_key(extra_key):
@@ -865,7 +1128,7 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
 
     def upload_specified_file(
         self,
-        local_filename: Union[str, PurePosixPath],
+        local_filename: Union[str, Path],
         extra_args: Optional[dict] = None,
         transfer_config: Optional[TransferConfig] = None,
     ):
@@ -883,7 +1146,7 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
 
     def download_specified_file(
         self,
-        local_filename: Union[str, PurePosixPath],
+        local_filename: Union[str, Path],
         extra_args: Optional[dict] = None,
         transfer_config: Optional[TransferConfig] = None,
     ):
@@ -898,3 +1161,7 @@ class S3_Bucket_Folder_File(S3_Bucket_Folder):
             extra_args=extra_args,
             transfer_config=transfer_config,
         )
+
+    last_modified = S3_Bucket_Key.last_modified
+    size = S3_Bucket_Key.size
+    iter_versions = S3_Bucket_Key.iter_versions

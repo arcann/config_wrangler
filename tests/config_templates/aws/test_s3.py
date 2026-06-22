@@ -1,19 +1,27 @@
 import logging
 import os
 import unittest
+from datetime import datetime, UTC
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
-import requests
-import requests_mock
 
 import boto3
+import requests
+import requests_mock
 from botocore.exceptions import ClientError
 from moto import mock_aws
 from moto.core import set_initial_no_auth_action_count
-
-from config_wrangler.config_templates.aws.s3_bucket import S3_Bucket, S3_Bucket_Folder, S3_Bucket_Key
-from config_wrangler.config_templates.credentials import PasswordSource
+from pydantic import ValidationError
 from tests.base_tests_mixin import Base_Tests_Mixin
+
+from config_wrangler.config_templates.aws.s3_bucket import (
+    S3_Bucket,
+    S3_Bucket_Folder,
+    S3_Bucket_Folder_File,
+    S3_Bucket_Key,
+    S3_Bucket_Key_Version,
+)
+from config_wrangler.config_templates.credentials import PasswordSource
 
 
 @mock_aws
@@ -46,8 +54,46 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             }
         )
 
+        # Enable versioning on bucket3
+        self.mock_client.put_bucket_versioning(
+            Bucket=self.bucket3_name,
+            VersioningConfiguration={'Status': 'Enabled'}
+        )
+
         self.file1_path = self.get_test_files_path() / 'test_good.ini'
         self.file2_path = self.get_test_files_path() / 'test_bad_interpolations.ini'
+
+        # Create a versioned file in bucket3 with 3 versions
+        self.versioned_key = 'versioned_file.txt'
+        self.versioned_base_content = "Version 1 content"
+        self.versioned_dt = datetime.now(tz=UTC)
+        with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_path = Path(tmp)
+            versioned_file = tmp_path / 'versioned.txt'
+
+            # Version 1
+            versioned_file.write_text(self.versioned_base_content)
+            self.mock_client.upload_file(
+                Bucket=self.bucket3_name,
+                Key=self.versioned_key,
+                Filename=str(versioned_file)
+            )
+
+            # Version 2
+            versioned_file.write_text(self.versioned_base_content.replace('1', '2'))
+            self.mock_client.upload_file(
+                Bucket=self.bucket3_name,
+                Key=self.versioned_key,
+                Filename=str(versioned_file)
+            )
+
+            # Version 3 (current)
+            versioned_file.write_text(self.versioned_base_content.replace('1', '3'))
+            self.mock_client.upload_file(
+                Bucket=self.bucket3_name,
+                Key=self.versioned_key,
+                Filename=str(versioned_file)
+            )
 
         self.example1_key = 'test_good.ini'
         self.mock_client.upload_file(
@@ -670,3 +716,163 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             raw_password='super secret password',
             password_source=PasswordSource.CONFIG_FILE,
         )
+
+    def test_iter_versions(self):
+        """Test that iter_versions retrieves all 3 mocked versions of the versioned file."""
+        bucket = S3_Bucket(
+            bucket_name=self.bucket3_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+
+        # Get the versioned file
+        versioned_file = bucket / self.versioned_key
+
+        # Iterate through versions and collect them
+        versions = list(versioned_file.iter_versions())
+
+        # Assert we have 3 versions
+        self.assertEqual(len(versions), 3, "Expected 3 versions of the versioned file")
+
+        # Verify each version has required attributes
+        for version in versions:
+            self.assertIsNotNone(version.version_id)
+            self.assertEqual(version.key, self.versioned_key)
+            self.assertEqual(version.bucket_name, self.bucket3_name)
+            # Check that the version is an S3_Bucket_Key_Version instance
+            self.assertIsInstance(version, S3_Bucket_Key_Version)
+            self.assertEqual(len(self.versioned_base_content), version.size)
+            self.assertGreaterEqual(self.versioned_dt, version.last_modified)
+
+        # Verify that at least one version is marked as latest
+        latest_versions = [v for v in versions if v.is_latest]
+        self.assertEqual(len(latest_versions), 1, "Expected exactly one version marked as latest")
+
+        # Verify all version IDs are unique (moto generates these, but we're testing that they flowed through OK)
+        version_ids = [v.version_id for v in versions]
+        self.assertEqual(len(version_ids), len(set(version_ids)), "All version IDs should be unique")
+
+    def test_s3_bucket_repr(self):
+        """Test __repr__ method for S3_Bucket class."""
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            key='test_key',
+            treat_as_folder=True,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        repr_str = repr(bucket)
+        self.assertIn('S3_Bucket', repr_str)
+        self.assertIn('bucket_name=mock_bucket', repr_str)
+        self.assertIn("key='test_key'", repr_str)
+        self.assertIn('treat_as_folder=True', repr_str)
+
+    def test_s3_bucket_key_repr(self):
+        """Test __repr__ method for S3_Bucket_Key class."""
+        bucket_key = S3_Bucket_Key(
+            bucket_name=self.bucket1_name,
+            key='folder1/file.txt',
+            treat_as_folder=False,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        repr_str = repr(bucket_key)
+        self.assertIn('S3_Bucket_Key', repr_str)
+        self.assertIn('bucket_name=mock_bucket', repr_str)
+        self.assertIn("key='folder1/file.txt'", repr_str)
+        self.assertIn('treat_as_folder=False', repr_str)
+
+    def test_s3_bucket_key_version_repr(self):
+        """Test __repr__ method for S3_Bucket_Key_Version class."""
+        bucket = S3_Bucket(
+            bucket_name=self.bucket3_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        versioned_file = bucket / self.versioned_key
+        versions = list(versioned_file.iter_versions())
+
+        # Get the first version to test
+        version = versions[0]
+        repr_str = repr(version)
+
+        self.assertIn('S3_Bucket_Key_Version', repr_str)
+        self.assertIn('bucket_name=mock_bucket3', repr_str)
+        self.assertIn(f"key='{self.versioned_key}'", repr_str)
+        self.assertIn('version_id=', repr_str)
+
+    def test_s3_bucket_folder_repr(self):
+        """Test __repr__ method for S3_Bucket_Folder class."""
+        bucket_folder = S3_Bucket_Folder(
+            bucket_name=self.bucket1_name,
+            folder='folder1',
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        repr_str = repr(bucket_folder)
+        self.assertIn('S3_Bucket_Folder', repr_str)
+        self.assertIn('bucket_name=mock_bucket', repr_str)
+        self.assertIn("folder='folder1'", repr_str)
+
+    def test_s3_bucket_folder_file_repr(self):
+        """Test __repr__ method for S3_Bucket_Folder_File class."""
+        bucket_folder_file = S3_Bucket_Folder_File(
+            bucket_name=self.bucket1_name,
+            folder='folder1',
+            file_name='file.txt',
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        repr_str = repr(bucket_folder_file)
+        self.assertIn('S3_Bucket_Folder_File', repr_str)
+        self.assertIn("bucket_name='mock_bucket'", repr_str)
+        self.assertIn("folder='folder1'", repr_str)
+        self.assertIn("file_name='file.txt'", repr_str)
+
+    def test_s3_bucket_folder_file_zero_length_filename(self):
+        """Test that S3_Bucket_Folder_File raises ConfigError for zero-length file_name."""
+        with self.assertRaises(ValidationError) as context:
+            S3_Bucket_Folder_File(
+                bucket_name=self.bucket1_name,
+                folder='folder1',
+                file_name='',
+                user_id='mock_user',
+                raw_password='super secret password',
+                password_source=PasswordSource.CONFIG_FILE,
+            )
+        self.assertIn("Zero length string not a valid file_name", str(context.exception))
+
+    def test_s3_bucket_folder_file_method(self):
+        bucket_folder_file = S3_Bucket_Folder_File(
+            bucket_name=self.bucket1_name,
+            folder='',
+            file_name=self.example1_key,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+
+        self.assertTrue(bucket_folder_file.is_file())
+
+        with bucket_folder_file.open('rb') as bf:
+            bf_contents = bf.read()
+        with self.file1_path.open('rb') as lf:
+            lf_contents = lf.read()
+        self.assertEqual(lf_contents, bf_contents)
+
+        with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_path = Path(tmp)
+            tmp_file = tmp_path / 'path12'
+
+            bucket_folder_file.download_file(
+                local_filename=tmp_file,
+            )
+            self._assert_files_equal(self.file1_path, tmp_file)
+
+
