@@ -489,9 +489,11 @@ class SQLAlchemyDatabase(Credentials):
                 # End engine receive_checkout
 
                 @event.listens_for(self._engine, 'engine_connect')
-                def receive_engine_connect(connection, **kwargs):
+                def receive_engine_connect(connection, *args, **kwargs):
                     """
                     listen for the 'engine_connect' event
+
+                    Note: *args is required to receive the v1.4 branch argument
                     """
                     log.debug(
                         f'engine_connect: Creds expire {self._rs_credential_expiry}'

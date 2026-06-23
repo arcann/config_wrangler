@@ -82,6 +82,7 @@ class S3_Bucket(AWS_Session):
     treat_as_folder: bool = False
 
     _service: str = PrivateAttr(default='s3')
+    _object_cache: dict[str, 'Object | ObjectVersion'] = PrivateAttr(default=None)
 
     OverwriteModes: ClassVar[type[OverwriteModes]] = OverwriteModes
 
@@ -510,13 +511,20 @@ class S3_Bucket(AWS_Session):
         else:
             return obj.Version(version_id)
 
-    @cached(cache=TTLCache(maxsize=1024, ttl=10))
     def get_object(
             self,
             key: Optional[Union[str, PurePosixPath]] = None,
             version_id: str | None = None,
-    ) -> 'Object':
-        return self.get_object_uncached(key, version_id=version_id)
+    ) -> 'Object | ObjectVersion':
+        if self._object_cache is None:
+            self._object_cache = {}
+        hash_key = f"{self.bucket_name}:{key},version={version_id}"
+        try:
+            return self._object_cache[hash_key]
+        except KeyError:
+            s3_object = self.get_object_uncached(key, version_id=version_id)
+            self._object_cache[hash_key] = s3_object
+            return s3_object
 
     def delete(
             self,
