@@ -875,4 +875,42 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
             )
             self._assert_files_equal(self.file1_path, tmp_file)
 
+    def test_download_all_versions(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket3_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_path = Path(tmp)
+            for s3_file in bucket.iterdir():
+                s3_key = s3_file.key
+                for version in s3_file.iter_versions():
+                    local_path = tmp_path / s3_key
+                    local_path = local_path.with_name(
+                        f"{local_path.stem}_version_{version.version_id}{local_path.suffix}"
+                    )
+                    version.download_file(
+                        local_filename=local_path,
+                    )
 
+    def test_download_all_versions_from_non_versioned(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        with TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            tmp_path = Path(tmp)
+            for s3_file in bucket.iterdir():
+                s3_key = s3_file.key
+                for version in s3_file.iter_versions():
+                    local_path = tmp_path / s3_key
+                    local_path = local_path.with_name(
+                        f"{local_path.stem}_version_{version.version_id}{local_path.suffix}"
+                    )
+                    version.download_file(
+                        local_filename=local_path,
+                    )

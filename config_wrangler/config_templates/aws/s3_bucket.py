@@ -7,11 +7,9 @@ from functools import lru_cache
 from pathlib import PurePosixPath, Path, PurePath
 from typing import *
 
-from cachetools import cached, TTLCache
-from pydantic import field_validator, PrivateAttr
-
 from config_wrangler.config_exception import ConfigError
 from config_wrangler.config_templates.aws.aws_session import AWS_Session
+from pydantic import field_validator, PrivateAttr
 
 # noinspection PyProtectedMember
 
@@ -243,12 +241,13 @@ class S3_Bucket(AWS_Session):
             do_upload = True
         else:
             try:
-                bucket_object = self.get_object(key)
+                key = self._get_key(key)
+                bucket_key = self / key
                 if overwrite_mode == OverwriteModes.NEVER_OVERWRITE:
                     do_upload = False
                 else:
                     local_filename = Path(local_filename)
-                    compare_result = S3_Bucket._compare_object_to_file(bucket_object, local_filename)
+                    compare_result = bucket_key.compare_to_file(local_filename)
                     if compare_result in {
                         S3_Bucket.CompareResult.DIFFERENT_SIZE,
                         S3_Bucket.CompareResult.LOCAL_NEWER
@@ -356,6 +355,18 @@ class S3_Bucket(AWS_Session):
             )
         else:
             log = logging.getLogger(f"{__name__}.download_file")
+
+            if isinstance(self, S3_Bucket_Key_Version):
+                s3_file: S3_Bucket_Key_Version = self
+            elif isinstance(self, S3_Bucket_Key):
+                s3_file: S3_Bucket_Key = self
+            elif isinstance(self, S3_Bucket_Folder_File):
+                s3_file = self._build_s3_bucket_key(self._get_key())
+            else:
+                raise ValueError(f"Need to specify a non-blank key for download_file from {type(self)}")
+
+            assert isinstance(s3_file, S3_Bucket_Key)
+
             local_path = Path(local_filename)
             if create_parents:
                 local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -367,12 +378,8 @@ class S3_Bucket(AWS_Session):
                             do_download = False
                             log.info(f"{self} download to {local_path} skipped since file exists and mode = {overwrite_mode}")
                         else:  # Check ages and size
-                            if _bucket_object_summary is None:
-                                bucket_object = self.get_object()
-                            else:
-                                bucket_object = _bucket_object_summary
 
-                            compare_result = S3_Bucket._compare_object_to_file(bucket_object, local_path)
+                            compare_result = s3_file.compare_to_file(local_path)
 
                             if compare_result in {
                                 S3_Bucket.CompareResult.DIFFERENT_SIZE,
@@ -526,6 +533,13 @@ class S3_Bucket(AWS_Session):
             self._object_cache[hash_key] = s3_object
             return s3_object
 
+    def get_s3_bucket_key(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+    ) -> 'S3_Bucket_Key':
+        key = self._get_key(key)
+        return self._build_s3_bucket_key(key, treat_as_folder=False)
+
     def delete(
             self,
             key: Optional[Union[str, PurePosixPath]] = None,
@@ -637,7 +651,6 @@ class S3_Bucket(AWS_Session):
         """
         Return the S3_Bucket_Key objects contained in the in/under this object.
         """
-        resolved_key = self._get_key()
         for obj in self.list_objects(treat_as_folder=True):
             bucket_key = self._build_s3_bucket_key(key=obj.key)
             bucket_key._last_modified = obj.last_modified
@@ -744,6 +757,12 @@ class S3_Bucket(AWS_Session):
         # noinspection PyTypeChecker
         return new_path
 
+    def as_bucket(self) -> 'S3_Bucket':
+        return self._factory(
+            S3_Bucket,
+            exclude={'key', 'folder', 'file_name'},
+        )
+
     def _build_s3_bucket_folder(self, folder: Union[str, Path]):
         return self._factory(
             S3_Bucket_Folder,
@@ -802,21 +821,51 @@ class S3_Bucket_Key(S3_Bucket):
     def __repr__(self):
         return f"S3_Bucket_Key(bucket_name={self.bucket_name}, {self.key=}. {self.treat_as_folder=})"
 
+    def _set_attributes(self):
+        obj = self.get_object()
+        self._last_modified = obj.last_modified
+        try:
+            self._size = obj.size
+        except AttributeError:
+            self._size = obj.content_length
+
     @property
     def last_modified(self) -> datetime:
         if self._last_modified is None:
-            obj = self.get_object()
-            self._last_modified = obj.last_modified
-            self._size = obj.size
+            self._set_attributes()
+        assert self._last_modified is not None
         return self._last_modified
 
     @property
     def size(self) -> int:
         if self._size is None:
-            obj = self.get_object()
-            self._last_modified = obj.last_modified
-            self._size = obj.size
+            self._set_attributes()
+        assert self._size is not None
         return self._size
+
+    def compare_to_file(
+            self,
+            local_filename: Path,
+    ) -> 'S3_Bucket.CompareResult':
+        s3_last_modified = self.last_modified
+        s3_file_size = self.size
+
+        local_stats = local_filename.stat()
+        local_last_modified = datetime.fromtimestamp(
+            local_stats.st_mtime,
+            tz=local_timezone
+        )
+        local_file_size = local_stats.st_size
+
+        if s3_file_size != local_file_size:
+            return S3_Bucket.CompareResult.DIFFERENT_SIZE
+        else:
+            if local_last_modified > s3_last_modified:
+                return S3_Bucket.CompareResult.LOCAL_NEWER
+            elif local_last_modified == s3_last_modified:
+                return S3_Bucket.CompareResult.SAME_TIMES
+            else:
+                return S3_Bucket.CompareResult.LOCAL_OLDER
 
     def iter_versions(self) -> Iterator['S3_Bucket_Key_Version']:
         """
@@ -840,10 +889,13 @@ class S3_Bucket_Key(S3_Bucket):
                 versions = page.get('Versions', [])
                 for version_data in versions:
                     if version_data['Key'] == key:
+                        version_id = version_data['VersionId']
+                        if version_id == 'null':
+                            version_id = None
                         obj = self._factory(
                             S3_Bucket_Key_Version,
                             key=key,
-                            version_id=version_data['VersionId'],
+                            version_id=version_id,
                             is_latest=version_data.get('IsLatest', False),
                         )
                         obj._last_modified = version_data.get('LastModified')
@@ -921,6 +973,15 @@ class S3_Bucket_Key_Version(S3_Bucket_Key):
     is_latest: bool = False
     treat_as_folder: bool = False
 
+    @field_validator('version_id')
+    @classmethod
+    def validate_version_id(cls, v):
+        if not isinstance(v, str):
+            v = str(v)
+        if v == 'null':
+            v = None
+        return v
+
     def __str__(self):
         key = self._get_key()
         return f"s3://{self.bucket_name}/{key}?versionId={self.version_id}"
@@ -994,7 +1055,7 @@ class S3_Bucket_Key_Version(S3_Bucket_Key):
     ):
         if extra_args is None:
             extra_args = {}
-        if 'VersionId' not in extra_args:
+        if 'VersionId' not in extra_args and self.version_id is not None:
             extra_args['VersionId'] = self.version_id
 
         super().download_file(
