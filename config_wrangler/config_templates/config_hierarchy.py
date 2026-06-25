@@ -2,28 +2,11 @@ from __future__ import annotations
 
 import json
 import warnings
-from typing import MutableMapping, Any, TYPE_CHECKING, List, Dict, Set, Generator, Tuple, Literal
-
-from pydantic import PrivateAttr, BaseModel, ValidationError
+from pprint import pprint
+from typing import MutableMapping, Any, List, Dict, Set, Generator, Tuple, Literal
 
 from config_wrangler.config_wrangler_config import ConfigWranglerConfig
-
-# noinspection PyProtectedMember
-
-if TYPE_CHECKING:
-    from config_wrangler.config_from_loaders import ConfigFromLoaders
-
-
-# class SectionMissingError(PydanticValueError):
-#     msg_template = 'Section required'
-#
-#
-# class BadValueError(PydanticValueError):
-#     msg_template = '{original}. value_provided = {value_str}'
-#
-#     def __init__(self, original: PydanticValueError, value_str: str) -> None:
-#         super().__init__(original=original, value_str=value_str)
-#
+from pydantic import PrivateAttr, BaseModel, ValidationError
 
 private_attrs = ('_root_config', '_parents', '_name_map')
 
@@ -40,11 +23,11 @@ class ConfigHierarchy(BaseModel):
         validate_assignment=True,
         validate_credentials=True
     )
-    _root_config: 'ConfigFromLoaders' = PrivateAttr(default=None)
+    _root_config: 'ConfigHierarchy' = PrivateAttr(default=None)
     _DEFAULT_PARENTS = ['parents_not_set']
     _parents: List[str] = PrivateAttr(default=_DEFAULT_PARENTS)
     _name_map: Dict[str, str] = PrivateAttr(default={})
-    _private_value_atts = PrivateAttr(default={})
+    _private_value_atts: set = PrivateAttr(default_factory=set)
 
     # noinspection PyMethodParameters
     # noinspection PyProtectedMember
@@ -71,8 +54,8 @@ class ConfigHierarchy(BaseModel):
                     location_str = '.'.join(location)
                     input_data = error['ctx']['input']
                     # Input might not be a dict
-                    for setting, value in e.errors()['ctx']['input']:
-                        print(f"input dict for {location_str}: {setting}={value}")
+                    print(f"input dict for {location_str}:")
+                    pprint(input_data, indent=3)
                 except Exception:
                     pass
             raise ValidationError.from_exception_data(
@@ -91,7 +74,7 @@ class ConfigHierarchy(BaseModel):
 
     def _dict_for_init(
             self,
-            exclude: Set[str] = None,
+            exclude: Set[str] | None = None,
     ) -> Dict[str, Any]:
         d = self.model_dump()
         d.update(**self._private_attr_dict())
@@ -101,7 +84,7 @@ class ConfigHierarchy(BaseModel):
                     del d[exclude_attr]
         return d
 
-    def full_item_name(self, item_name: str = None, delimiter: str = ' -> '):
+    def full_item_name(self, item_name: str | None = None, delimiter: str = ' -> '):
         """
         The fully qualified name of this config item in the config hierarchy.
         """
@@ -122,60 +105,6 @@ class ConfigHierarchy(BaseModel):
         with newer config class definitions.
         """
         return config_data
-
-    def get(self, section, item, fallback=...):
-        """
-        Used as a drop in replacement for ConfigParser.get() with dynamic config field names
-        (using a string variable for the section and item names instead of python code attribute access)
-
-        .. warning::
-
-            With this method Python code checkers (linters) will not warn about invalid config items.
-            You can end up with runtime AttributeError errors.
-        """
-        try:
-            section_obj = getattr(self, section)
-            return getattr(section_obj, item)
-        except AttributeError:
-            if fallback is ...:
-                raise
-            else:
-                return fallback
-
-    def getboolean(self, section, item, fallback=...) -> bool:
-        """
-        Used as a drop in replacement for ConfigParser.getboolean() with dynamic config field names
-        (using a string variable for the section and item names instead of python code attribute access)
-
-        .. warning::
-
-            With this method Python code checkers (linters) will not warn about invalid config items.
-            You can end up with runtime AttributeError errors.
-        """
-        value = self.get(section=section, item=item, fallback=fallback)
-        if value is None:
-            value = False
-        if not isinstance(value, bool):
-            raise ValueError('getboolean called on non-bool config item')
-        return value
-
-    def get_list(self, section, item, fallback=...) -> list:
-        """
-        Used as a drop in replacement for ConfigParser.get() + list parsing with dynamic config field names
-        (using a string variable for the section and item names instead of python code attribute access)
-        that is then parsed as a list.
-
-        .. warning::
-
-            With this method Python code checkers (linters) will not warn about invalid config items.
-            You can end up with runtime AttributeError errors.
-        """
-        value = self.get(section=section, item=item, fallback=fallback)
-        if value is None:
-            value = []
-        if not isinstance(value, list):
-            raise ValueError('get_list called on non-list config item')
-        return value
 
     def __getitem__(self, section):
         try:
@@ -231,18 +160,18 @@ class ConfigHierarchy(BaseModel):
             self,
             *,
             mode: Literal['json', 'python'] | str = 'python',
-            exclude: Set[str] = None,
+            exclude: Set[str] | None = None,
     ) -> dict[str, Any]:
 
         result = dict()
 
         if exclude is None:
-            exclude = {}
+            exclude = set()
 
         for key, value in self:
             if key not in exclude:
                 if isinstance(value, ConfigHierarchy):
-                    result[key] = value.model_dump_safe(mode=mode, exclude=exclude)
+                    result[key] = value.model_dump_non_private(mode=mode, exclude=exclude)
                 else:
                     if mode == 'json':
                         result[key] = json.dumps(value)

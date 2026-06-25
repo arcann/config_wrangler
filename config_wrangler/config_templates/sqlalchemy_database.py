@@ -33,6 +33,39 @@ if TYPE_CHECKING:
 
 
 class SQLAlchemyDatabase(Credentials):
+    """
+    Configuration for SQLAlchemy database connections.
+
+    Extends :class:`~config_wrangler.config_templates.credentials.Credentials` to provide
+    SQLAlchemy-specific connection management including support for multiple dialects,
+    connection pooling, and AWS Redshift temporary credentials.
+
+    Parameters
+    ----------
+    dialect : str
+        The SQLAlchemy dialect to use (e.g., 'postgresql', 'mysql', 'oracle', 'sqlite').
+        See https://docs.sqlalchemy.org/en/20/dialects/
+    driver : str, optional
+        The Python database driver to use (e.g., 'psycopg2' for PostgreSQL).
+    host : str, optional
+        Hostname or IP address of the database server. Required for non-sqlite databases.
+    port : int, optional
+        Port number for the database connection.
+    database_name : str
+        Name of the database to connect to.
+    use_get_cluster_credentials : bool, default False
+        If True, use AWS Redshift temporary credentials via boto3.
+    rs_db_user_id : str, optional
+        Redshift database user ID for temporary credential requests.
+    create_engine_args : dict, optional
+        Additional arguments to pass to SQLAlchemy's create_engine function.
+    dbapi_args : dict, optional
+        Additional arguments to pass to the DBAPI via URI query parameters.
+
+    See Also
+    --------
+    config_wrangler.config_templates.credentials.Credentials : Base class for credential management
+    """
     dialect: str
     """
     The SQLAlchemy dialect to use.  See https://docs.sqlalchemy.org/en/20/dialects/
@@ -269,6 +302,32 @@ class SQLAlchemyDatabase(Credentials):
         return datetime.now(timezone.utc)
 
     def get_cluster_credentials(self) -> Tuple[str, str]:
+        """
+        Retrieve temporary database credentials from AWS Redshift.
+
+        Makes a boto3 call to get_cluster_credentials to obtain temporary database
+        credentials. Manages credential expiration and refreshes them as needed
+        based on the configured duration settings.
+
+        Returns
+        -------
+        tuple of (str, str)
+            A tuple containing (username, password) for the database connection.
+
+        Raises
+        ------
+        ValueError
+            If required Redshift configuration parameters are missing.
+        SQLAlchemyError
+            If the AWS response is invalid or missing required fields.
+
+        Notes
+        -----
+        Credential expiry is managed automatically based on the minimum of:
+        - The configured rs_new_credentials_seconds duration
+        - The server-provided expiration time minus a 15-minute safety margin
+        - IAM session expiry (if using AWS_ASSUME_ROLE)
+        """
         log = logging.getLogger('get_cluster_credentials')
         if self._rs_client is None:
             import boto3
@@ -359,6 +418,27 @@ class SQLAlchemyDatabase(Credentials):
             return f"{self.dialect}+{self.driver}"
 
     def get_uri(self) -> URL:
+        """
+        Construct a SQLAlchemy database URI from the configuration.
+
+        Builds a complete connection URI including credentials, host, port, and database name.
+        For Redshift with use_get_cluster_credentials enabled, retrieves temporary credentials
+        via :meth:`get_cluster_credentials`.
+
+        Returns
+        -------
+        sqlalchemy.engine.url.URL
+            A SQLAlchemy URL object representing the database connection string.
+
+        Raises
+        ------
+        ValueError
+            If rs_db_user_id is missing when use_get_cluster_credentials is True.
+
+        See Also
+        --------
+        get_cluster_credentials : Retrieves temporary Redshift credentials (called automatically by this method)
+        """
         user_id = self.user_id
         if self.use_get_cluster_credentials:
             if self.password_source != PasswordSource.AWS_ASSUME_ROLE:
@@ -411,6 +491,41 @@ class SQLAlchemyDatabase(Credentials):
                 )
 
     def get_engine(self) -> Engine:
+        """
+        Get or create the SQLAlchemy engine for this database connection.
+
+        Creates a new engine on first call and caches it for reuse. For Redshift with
+        temporary credentials enabled, sets up event listeners to handle credential
+        refresh and connection validation.
+
+        Returns
+        -------
+        sqlalchemy.engine.Engine
+            The SQLAlchemy engine instance for this database.
+
+        Raises
+        ------
+        ValueError
+            If an invalid poolclass value is configured.
+
+        Notes
+        -----
+        The engine is configured with the following optional parameters:
+        - arraysize (Oracle only)
+        - encoding
+        - poolclass (QueuePool or NullPool)
+        - Additional arguments from create_engine_args
+
+        For Redshift temporary credentials, event listeners are registered to:
+        - Refresh credentials on connection (do_connect)
+        - Validate credentials on checkout
+        - Perform pessimistic connection testing (engine_connect)
+        - Handle IAM authentication token expiration errors
+
+        See Also
+        --------
+        get_cluster_credentials : Retrieves temporary Redshift credentials (called automatically by this method)
+        """
         if self._engine is None:
 
             kwargs = self.create_engine_args or {}
@@ -574,8 +689,18 @@ class SQLAlchemyDatabase(Credentials):
 
     def raw_connection(self):
         """
-        Return a "raw" DBAPI connection from the connection pool.
+        Returns
+        -------
+        connection
+            A raw DBAPI connection object from the underlying connection pool.
 
+        See Also
+        --------
+        get_engine : Creates or retrieves the SQLAlchemy engine
+        connect : Returns a SQLAlchemy Connection wrapper
+
+        Notes
+        -----
         See https://docs.sqlalchemy.org/en/20/core/connections.html#sqlalchemy.engine.Engine.raw_connection
         """
         return self.get_engine().raw_connection()
@@ -583,7 +708,24 @@ class SQLAlchemyDatabase(Credentials):
     def connect(self) -> 'sqlalchemy.engine.base.Connection':
         """
         Connect to the configured database.
-        Special handling for sqlite where subsequent calls will return the same connection.
+
+        Creates a new SQLAlchemy Connection object. For SQLite databases, the same
+        connection is reused since it does not support concurrent connections.
+
+        Returns
+        -------
+        sqlalchemy.engine.base.Connection
+            A SQLAlchemy Connection object for executing SQL statements.
+
+        Notes
+        -----
+        SQLite connections are cached and reused. For other databases, a new
+        connection is obtained from the connection pool on each call.
+
+        See Also
+        --------
+        get_engine : Creates or retrieves the SQLAlchemy engine
+        session : Creates a SQLAlchemy session for ORM operations
         """
         if self.dialect == 'sqlite':
             # noinspection PyUnresolvedReferences
@@ -595,6 +737,17 @@ class SQLAlchemyDatabase(Credentials):
 
     def session(self) -> Session:
         """
-        Build a SQLAlchemy session from the configured database.
+        Creates a new SQLAlchemy Session bound to this database's engine for
+        performing ORM operations.
+
+        Returns
+        -------
+        sqlalchemy.orm.Session
+            A SQLAlchemy Session object for ORM-based database operations.
+
+        See Also
+        --------
+        get_engine : Creates or retrieves the SQLAlchemy engine
+        connect : Creates a connection for core SQL operations
         """
         return Session(bind=self.get_engine())
