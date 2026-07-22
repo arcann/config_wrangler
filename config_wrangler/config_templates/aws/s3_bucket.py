@@ -857,6 +857,40 @@ class S3_Bucket(AWS_Session):
                 )
             return results
 
+    def head_object(
+            self,
+            key: Optional[Union[str, PurePosixPath]] = None,
+            version_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Check if an S3 object exists.
+
+        Parameters
+        ----------
+        key : str | PurePosixPath | None, optional
+            S3 key to check. If None, uses the instance key.
+        version_id : str | None, optional
+            Specific version ID to check. If None, checks the latest version.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary as returned by boto3 head_object
+
+        Raises
+        ------
+        ClientError
+            If there's an error
+        """
+        key = self._get_key(key)
+
+        extra_args = {}
+        if version_id is not None:
+            extra_args['VersionId'] = version_id
+
+        # noinspection PyTypeChecker
+        return self.client.head_object(Bucket=self.bucket_name, Key=str(key), **extra_args)
+
     def exists(
             self,
             key: Optional[Union[str, PurePosixPath]] = None,
@@ -882,14 +916,8 @@ class S3_Bucket(AWS_Session):
         ClientError
             If there's an error other than 404/NoSuchKey.
         """
-        key = self._get_key(key)
-
-        extra_args = {}
-        if version_id is not None:
-            extra_args['VersionId'] = version_id
-
         try:
-            self.client.head_object(Bucket=self.bucket_name, Key=str(key), **extra_args)
+            self.head_object(key=key, version_id=version_id)
             return True
         except ClientError as ex:
             if self._boto3_error_match(ex, ERROR_S3_NOT_FOUND):
