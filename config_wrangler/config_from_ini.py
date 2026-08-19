@@ -1,9 +1,12 @@
 from typing import *
 
-from config_wrangler.config_from_loaders import ConfigFromLoaders
+from typing_extensions import deprecated
+
 from config_wrangler.config_data_loaders.ini_config_data_loader import IniConfigDataLoader
+from config_wrangler.config_from_loaders import ConfigFromLoaders
 
 
+@deprecated("Please use ConfigRoot.build_config_from_ini instead.")
 class ConfigFromIni(ConfigFromLoaders):
     # noinspection PyMethodParameters
     def __init__(

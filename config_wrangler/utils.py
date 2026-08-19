@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import types
+import typing
 import warnings
 from datetime import timezone, datetime
 from enum import Enum, auto
@@ -15,6 +16,8 @@ from pydicti import dicti, Dicti
 from config_wrangler.config_exception import ConfigError
 from config_wrangler.config_types.delimited_field import DelimitedListFieldInfo
 from config_wrangler.config_types.dynamically_referenced import DynamicallyReferenced, DynamicFieldInfo
+if typing.TYPE_CHECKING:
+    from config_wrangler.config_root import ConfigRoot
 
 
 INHERITS_ATTRIBUTE_NAME = '__inherits_from__'
@@ -112,6 +115,8 @@ class TZFormatter(logging.Formatter):
 
 
 def merge_configs(child: MutableMapping, parent: MutableMapping) -> None:
+    if parent is None:
+        return
     for section in parent:
         if section not in child:
             child[section] = parent[section]
@@ -168,7 +173,12 @@ def process_errors_list(
 _interpolation_re = re.compile(r"\${([^}]+)}")
 
 
-def interpolate_value(*, value: str, container: MutableMapping, root_config_data: MutableMapping) -> str:
+def interpolate_value(
+        *,
+        value: str,
+        container: MutableMapping,
+        root_config_data: MutableMapping,
+) -> str:
     """
     Throws: ValueError if value can not be interpolated
     """
@@ -260,7 +270,7 @@ def set_container_value(
         container: Union[MutableMapping, List, BaseModel],
         attr: Union[str, int],
         value: Any,
-        breadcrumbs: List[str] = None,
+        breadcrumbs: List[str] | None = None,
 ):
     if container_type == ContainerType.Mapping:
         container[attr] = value
@@ -271,6 +281,8 @@ def set_container_value(
             f"Can't interpolate {value} inside tuple. Make it a list! See {breadcrumbs}"
         )
     else:  # Model
+        if not isinstance(attr, str):
+            attr = str(attr)
         setattr(container, attr, value)
 
 
@@ -278,7 +290,7 @@ def process_inheritance(
         container: Union[MutableMapping, List, BaseModel],
         *,
         root_config_data: MutableMapping,
-        breadcrumbs: List[str] = None,
+        breadcrumbs: List[str] | None = None,
 ) -> List[Tuple[str, str]]:
     errors = []
     if breadcrumbs is None:
@@ -342,9 +354,9 @@ def process_inheritance(
 
 
 def interpolate_values(
-        container: Union[MutableMapping, List, BaseModel],
+        container: MutableMapping | List | BaseModel,
         root_config_data: MutableMapping,
-        breadcrumbs: List[str] = None,
+        breadcrumbs: list[str] | None = None,
 ) -> List[Tuple[str, str]]:
     errors = []
     if breadcrumbs is None:
@@ -386,22 +398,23 @@ def interpolate_values(
             )
             errors.extend(sub_errors)
         elif isinstance(value, str):
-            try:
-                new_value = interpolate_value(
-                    value=value,
-                    container=container,
-                    root_config_data=root_config_data
-                )
-                if new_value != value:
-                    set_container_value(
-                        container_type=container_type,
+            if isinstance(container, MutableMapping):
+                try:
+                    new_value = interpolate_value(
+                        value=value,
                         container=container,
-                        value=new_value,
-                        attr=attr,
-                        breadcrumbs=breadcrumbs,
+                        root_config_data=root_config_data
                     )
-            except ValueError as e:
-                errors.append(('.'.join(breadcrumbs), str(e)))
+                    if new_value != value:
+                        set_container_value(
+                            container_type=container_type,
+                            container=container,
+                            value=new_value,
+                            attr=attr,
+                            breadcrumbs=breadcrumbs,
+                        )
+                except ValueError as e:
+                    errors.append(('.'.join(breadcrumbs), str(e)))
     return errors
 
 
@@ -587,7 +600,7 @@ def match_config_data_to_field(
         field_info: FieldInfo,
         field_value: object,
         parent_container: MutableMapping,
-        root_config_data: MutableMapping,
+        root_config_data: MutableMapping | None,
         parents: List[str],
 ):
     if lenient_issubclass(field_info.annotation, (str, int, float)):
@@ -721,13 +734,17 @@ def match_config_data_to_field(
 
 
 def match_config_data_to_model(
-        model: BaseModel,
+        model: type['ConfigRoot'],
         config_data: MutableMapping,
-        root_config_data: MutableMapping = None,
+        root_config_data: MutableMapping | None = None,
         parents=None
 ):
+    if config_data is None:
+        return
+
     if parents is None:
         parents = []
+
     if root_config_data is None:
         root_config_data = config_data
 
@@ -781,11 +798,11 @@ def match_config_data_to_field_or_submodel(
         field_name: str,
         field_info: FieldInfo,
         parent_container: MutableMapping,
-        root_config_data: MutableMapping = None,
+        root_config_data: MutableMapping | None = None,
         parents=None
 ):
 
-    if has_sub_fields(field_info.annotation):
+    if field_info.annotation is not None and has_sub_fields(field_info.annotation):
         if field_name not in parent_container:
             raise ValueError(f"Field {full_name(parents, field_name)} not found.")
 
@@ -836,7 +853,7 @@ def match_config_data_to_field_or_submodel(
 
 
 def walk_model(
-        model: BaseModel,
+        model: type['ConfigRoot'],
         parents=None
 ):
     if parents is None:

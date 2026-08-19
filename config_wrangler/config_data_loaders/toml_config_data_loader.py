@@ -6,6 +6,7 @@ from typing import *
 from pydantic import BaseModel
 
 from config_wrangler.config_data_loaders.file_config_data_loader import FileConfigDataLoader
+from config_wrangler.config_root import ConfigRoot
 from config_wrangler.config_types.dynamically_referenced import ListDynamicallyReferenced
 from config_wrangler.utils import lenient_issubclass
 
@@ -14,7 +15,7 @@ class TomlConfigDataLoader(FileConfigDataLoader):
     def __init__(
             self,
             file_name: str,
-            start_path: Optional[str] = None,
+            start_path: Path | str | None = None,
     ):
         super().__init__(
             start_path=start_path,
@@ -34,7 +35,7 @@ class TomlConfigDataLoader(FileConfigDataLoader):
             config_data = self.toml.load(toml_content)
         return config_data
 
-    def save_config_data(self, config_data: BaseModel):
+    def save_config_data(self, config_data: ConfigRoot):
         file_path = Path(self.start_path, self.file_name)
         config_data_toml_ready = TomlConfigDataLoader.prepare_config_data_for_save(config_data)
         with file_path.open('wt', encoding='utf8') as config_file:

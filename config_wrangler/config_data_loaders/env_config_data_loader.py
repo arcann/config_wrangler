@@ -3,9 +3,8 @@ import os
 from copy import deepcopy
 from typing import *
 
-from pydantic import BaseModel
-
 from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
+from config_wrangler.config_root import ConfigRoot
 from config_wrangler.utils import walk_model, match_config_data_to_field, has_sub_fields
 
 
@@ -20,7 +19,7 @@ class EnvConfigDataLoader(BaseConfigDataLoader):
         self.env_prefix = env_prefix or ''
         self.log = logging.getLogger(__name__)
 
-    def read_config_data(self, model: BaseModel) -> MutableMapping:
+    def read_config_data(self, model: type[ConfigRoot]) -> MutableMapping:
         config_data = deepcopy(self._init_config_data)
 
         env_vars = {k.lower(): v for k, v in os.environ.items()}

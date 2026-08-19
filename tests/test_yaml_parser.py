@@ -10,15 +10,15 @@ from config_wrangler.config_templates.keepass_config import KeepassConfig
 from tests.test_ini_parser import TestIniParser, TestSettings, ConfigCommon
 
 
-class ConfigToTestWith(ConfigFromYamlEnv, ConfigCommon):
+class ConfigToTestWithLegacyLoader(ConfigFromYamlEnv, ConfigCommon):
     pass
 
 
-class ConfigWithTestFilePath(ConfigToTestWith):
+class ConfigWithTestFilePath(ConfigCommon):
     test_settings: TestSettings
 
 
-class ConfigWithKeypass(ConfigWithTestFilePath):
+class ConfigWithKeypass(ConfigCommon):
     keepass: KeepassConfig
 
 
@@ -26,7 +26,7 @@ class FakeKeepassConfig(ConfigHierarchy):
     pass
 
 
-class ConfigWithBadKeypass(ConfigToTestWith):
+class ConfigWithBadKeypass(ConfigCommon):
     keepass: FakeKeepassConfig
 
 
@@ -41,22 +41,30 @@ class TestYamlParser(TestIniParser):
     def get_test_files_path(self):
         return self.get_package_path() / 'test_config_files_yaml'
 
+    # noinspection argument-list
     def test_read_start_path(self):
-        config = ConfigToTestWith(
+        config = ConfigToTestWithLegacyLoader(
+            file_name='test_good.yaml',
+            start_path=self.get_test_files_path()
+        )
+        self._test_simple_example_config(config)
+
+    def test_build(self):
+        config = ConfigCommon.build_config_from_yaml_env(
             file_name='test_good.yaml',
             start_path=self.get_test_files_path()
         )
         self._test_simple_example_config(config)
 
     def test_read_start_path_deeper_start(self):
-        config = ConfigToTestWith(
+        config = ConfigCommon.build_config_from_yaml_env(
             file_name='test_good.yaml',
             start_path=os.path.join(self.get_test_files_path(), 'deeper_dir')
         )
         self._test_simple_example_config(config)
 
     def test_read_start_path_deeper_start_2(self):
-        config = ConfigToTestWith(
+        config = ConfigCommon.build_config_from_yaml_env(
             file_name='test_good.yaml',
             start_path=os.path.join(self.get_test_files_path(), 'deeper_dir', 'deeper_does_not_exist')
         )
@@ -64,37 +72,37 @@ class TestYamlParser(TestIniParser):
 
     def test_read_cwd(self):
         with mock.patch("os.getcwd", return_value=self.get_test_files_path()) as mock_cwd:
-            config = ConfigToTestWith(file_name='test_good.yaml')
+            config = ConfigCommon.build_config_from_yaml_env(file_name='test_good.yaml')
             self._test_simple_example_config(config)
             mock_cwd.assert_called()
 
     def test_read_cwd_deeper_start(self):
         with mock.patch("os.getcwd", return_value=os.path.join(self.get_test_files_path(), 'deeper_dir')) as mock_cwd:
-            config = ConfigToTestWith(file_name='test_good.yaml')
+            config = ConfigCommon.build_config_from_yaml_env(file_name='test_good.yaml')
             self._test_simple_example_config(config)
             mock_cwd.assert_called()
 
     def test_does_not_exist(self):
         with self.assertRaises(FileNotFoundError):
-            _ = ConfigToTestWith(file_name='test_dne.yaml')
+            _ = ConfigCommon.build_config_from_yaml_env(file_name='test_dne.yaml')
 
     def test_read_no_password(self):
         with self.assertRaises(pydantic.ValidationError):
-            _ = ConfigToTestWith(
+            _ = ConfigCommon.build_config_from_yaml_env(
                 file_name='test_no_pw.yaml',
                 start_path=self.get_test_files_path()
             )
 
     def test_missing_section(self):
         with self.assertRaises(pydantic.ValidationError):
-            _ = ConfigToTestWith(
+            _ = ConfigCommon.build_config_from_yaml_env(
                 file_name='test_no_pw.yaml',
                 start_path=self.get_test_files_path()
             )
 
     def test_bad_interpolations(self):
         with self.assertRaises(ValueError):
-            _ = ConfigToTestWith(
+            _ = ConfigCommon.build_config_from_yaml_env(
                 file_name='test_bad_interpolations.yaml',
                 start_path=self.get_test_files_path()
             )
@@ -109,7 +117,7 @@ class TestYamlParser(TestIniParser):
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             with mock.patch("os.getcwd", return_value=self.get_test_files_path()) as mock_cwd:
-                config = ConfigWithKeypass(
+                config = ConfigWithKeypass.build_config_from_yaml_env(
                     file_name='test_keepass_good.yaml',
                     start_path=self.get_test_files_path()
                 )
@@ -126,7 +134,7 @@ class TestYamlParser(TestIniParser):
 
     def test_read_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
-            _ = ConfigWithKeypass(
+            _ = ConfigWithKeypass.build_config_from_yaml_env(
                 file_name='test_keepass_bad_missing.yaml',
                 start_path=self.get_test_files_path()
             )
@@ -139,7 +147,7 @@ class TestYamlParser(TestIniParser):
     def test_read_keepass_bad_values(self):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
         with self.assertRaises(ValueError) as raises_cm:
-            _ = ConfigWithKeypass(
+            _ = ConfigWithKeypass.build_config_from_yaml_env(
                 file_name='test_keepass_bad_values.yaml',
                 start_path=self.get_test_files_path()
             )
@@ -152,7 +160,7 @@ class TestYamlParser(TestIniParser):
     def test_read_keepass_bad2(self):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
         with self.assertRaises(ValueError) as raises_cm:
-            config = ConfigWithBadKeypass(
+            config = ConfigWithBadKeypass.build_config_from_yaml_env(
                 file_name='test_keepass_bad_missing_entirely.yaml',
                 start_path=self.get_test_files_path()
             )
@@ -167,13 +175,14 @@ class TestYamlParser(TestIniParser):
             from pykeepass import PyKeePass
 
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithKeypass(
+            config = ConfigWithKeypass.build_config_from_yaml_env(
                 file_name='test_keepass_good.yaml',
                 start_path=self.get_test_files_path()
             )
 
             config.target_database.keepass_group = 'bad'
             with self.assertRaises(ValueError) as raises_cm:
+                # noinspection bad-argument-type
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     config.target_database.get_password()
@@ -191,13 +200,14 @@ class TestYamlParser(TestIniParser):
             from pykeepass import PyKeePass
 
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithKeypass(
+            config = ConfigWithKeypass.build_config_from_yaml_env(
                 file_name='test_keepass_good.yaml',
                 start_path=self.get_test_files_path()
             )
 
             config.target_database.user_id = 'bad'
             with self.assertRaises(ValueError) as raises_cm:
+                # noinspection bad-argument-type
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     config.target_database.get_password()
@@ -220,7 +230,7 @@ class TestYamlParser(TestIniParser):
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             os.chdir(self.get_test_files_path())
-            config = ConfigWithTestFilePath(
+            config = ConfigWithTestFilePath.build_config_from_yaml_env(
                 file_name='test_keepass_good_keepass_sub.yaml',
                 start_path=self.get_test_files_path()
             )
@@ -249,7 +259,7 @@ class TestYamlParser(TestIniParser):
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
             with mock.patch("os.getcwd", return_value=self.get_test_files_path()) as mock_cwd:
-                config = ConfigWithTestFilePath(
+                config = ConfigWithTestFilePath.build_config_from_yaml_env(
                     file_name='test_keepass_good_keepass_shared_sub.yaml',
                     start_path=self.get_test_files_path()
                 )
@@ -264,9 +274,10 @@ class TestYamlParser(TestIniParser):
             else:
                 raise
 
+    # noinspection argument-list
     def test_read_sub_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
-            _ = ConfigToTestWith(
+            _ = ConfigToTestWithLegacyLoader(
                 file_name='test_keepass_bad_missing_sub.yaml',
                 start_path=self.get_test_files_path()
             )
@@ -278,7 +289,8 @@ class TestYamlParser(TestIniParser):
 
     def test_read_shared_sub_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
-            _ = ConfigToTestWith(
+            # noinspection argument-list
+            _ = ConfigToTestWithLegacyLoader(
                 file_name='test_keepass_bad_missing_shared_sub.yaml',
                 start_path=self.get_test_files_path()
             )
@@ -289,6 +301,8 @@ class TestYamlParser(TestIniParser):
         self.assertIn('Field required', exc_str)
 
     def test_read_keyring_good(self):
+        keyring = None
+        # noinspection unresolved-references
         try:
             import keyring
         except ImportError:
@@ -301,7 +315,8 @@ class TestYamlParser(TestIniParser):
             if keyring is not None:
                 # If keyring is actually installed, use it to set the password
                 keyring.set_password('example_section', 'python_unittester_01', password)
-            config = ConfigToTestWith(
+            # noinspection argument-list
+            config = ConfigToTestWithLegacyLoader(
                 file_name='test_keyring.yaml',
                 start_path=self.get_test_files_path()
             )
@@ -310,8 +325,6 @@ class TestYamlParser(TestIniParser):
             d = config.model_dump()
             self.assertEqual(d['test_section']['my_url'], config.test_section.my_url)
             self.assertEqual(d['test_section']['my_int'], config.test_section.my_int)
-        except keyring.errors.NoKeyringError:
-            self.skipTest(f"Test requires keyring backend")
         except (ValueError, ImportError) as e:
             if "No module named 'keyring'" in str(e):
                 if keyring is None:

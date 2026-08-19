@@ -5,8 +5,10 @@ from pathlib import Path
 from typing import *
 
 from pydantic import BaseModel
+from pydantic._internal._model_construction import ModelMetaclass
 
 from config_wrangler.config_data_loaders.file_config_data_loader import FileConfigDataLoader
+from config_wrangler.config_root import ConfigRoot
 from config_wrangler.config_types.dynamically_referenced import ListDynamicallyReferenced
 from config_wrangler.utils import full_name, lenient_issubclass
 
@@ -23,11 +25,11 @@ class IniConfigDataLoader(FileConfigDataLoader):
 
         return config_data_dict
 
-    def save_empty_config_data(self, config_model: BaseModel):
+    def save_empty_config_data(self, config_model: type[ConfigRoot]):
         file_path = Path(self.start_path, self.file_name)
 
         with file_path.open('wt') as config_file:
-            logging_re = re.compile(r'Dict[str, (\W+.)*LogLevel]')
+            logging_re = re.compile(r'Dict\[str, (\W+.)*LogLevel]')
             app_config_signature = inspect.signature(config_model)
             for section in app_config_signature.parameters.values():
                 if section.name[0] != '_':
@@ -78,7 +80,7 @@ class IniConfigDataLoader(FileConfigDataLoader):
             config: BaseModel,
             default_delimiter='\n',
             parents=None,
-            root_config_data: MutableMapping = None
+            root_config_data: MutableMapping | None = None
     ) -> dict:
         if parents is None:
             parents = []

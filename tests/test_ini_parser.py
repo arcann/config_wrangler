@@ -66,7 +66,7 @@ class TestCommonSection(ConfigHierarchy):
     value_c: str
 
 
-class ConfigCommon(ConfigHierarchy):
+class ConfigCommon(ConfigRoot):
 
     model_config = ConfigWranglerConfig(
         validate_default=True,
@@ -83,7 +83,11 @@ class ConfigCommon(ConfigHierarchy):
     test_inherit_section_3: TestCommonSection
 
 
-class ConfigToTestWith(ConfigFromIniEnv, ConfigCommon):
+class ConfigToTestWith(ConfigCommon):
+    pass
+
+
+class ConfigTestFromIni(ConfigFromIniEnv, ConfigCommon):
     pass
 
 
@@ -296,21 +300,21 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         )
 
     def test_read_start_path(self):
-        config = ConfigToTestWith(
+        config = ConfigToTestWith.build_config_from_ini_env(
             file_name='test_good.ini',
             start_path=self.get_test_files_path()
         )
         self._test_simple_example_config(config)
 
     def test_read_start_path_deeper_start(self):
-        config = ConfigToTestWith(
+        config = ConfigToTestWith.build_config_from_ini_env(
             file_name='test_good.ini',
             start_path=os.path.join(self.get_test_files_path(), 'deeper_dir')
         )
         self._test_simple_example_config(config)
 
     def test_read_start_path_deeper_start_2(self):
-        config = ConfigToTestWith(
+        config = ConfigToTestWith.build_config_from_ini_env(
             file_name='test_good.ini',
             start_path=os.path.join(self.get_test_files_path(), 'deeper_dir', 'deeper_does_not_exist')
         )
@@ -318,37 +322,37 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
 
     def test_read_cwd(self):
         with mock.patch("os.getcwd", return_value=self.get_test_files_path()) as mock_cwd:
-            config = ConfigToTestWith(file_name='test_good.ini')
+            config = ConfigToTestWith.build_config_from_ini_env(file_name='test_good.ini')
             self._test_simple_example_config(config)
             mock_cwd.assert_called()
 
     def test_read_cwd_deeper_start(self):
         with mock.patch("os.getcwd", return_value=os.path.join(self.get_test_files_path(), 'deeper_dir')) as mock_cwd:
-            config = ConfigToTestWith(file_name='test_good.ini')
+            config = ConfigToTestWith.build_config_from_ini_env(file_name='test_good.ini')
             self._test_simple_example_config(config)
             mock_cwd.assert_called()
 
     def test_does_not_exist(self):
         with self.assertRaises(FileNotFoundError):
-            _ = ConfigToTestWith(file_name='test_good.ini')
+            _ = ConfigToTestWith.build_config_from_ini_env(file_name='test_does not exist.ini')
 
     def test_read_no_password(self):
         with self.assertRaises(ValueError):
-            _ = ConfigToTestWith(
+            _ = ConfigToTestWith.build_config_from_ini_env(
                 file_name='test_no_pw.ini',
                 start_path=self.get_test_files_path()
             )
 
     def test_missing_section(self):
         with self.assertRaises(ValueError):
-            _ = ConfigToTestWith(
+            _ = ConfigToTestWith.build_config_from_ini(
                 file_name='test_no_pw.ini',
                 start_path=self.get_test_files_path()
             )
 
     def test_bad_interpolations(self):
         with self.assertRaises(ValueError):
-            _ = ConfigToTestWith(
+            _ = ConfigToTestWith.build_config_from_ini(
                 file_name='test_bad_interpolations.ini',
                 start_path=self.get_test_files_path()
             )
@@ -361,7 +365,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
 
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithKeypass(
+            config = ConfigWithKeypass.build_config_from_ini_env(
                 file_name='test_keepass_good.ini',
                 start_path=self.get_test_files_path()
             )
@@ -378,7 +382,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
 
     def test_read_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
-            _ = ConfigWithKeypass(
+            _ = ConfigWithKeypass.build_config_from_ini_env(
                 file_name='test_keepass_bad_missing.ini',
                 start_path=self.get_test_files_path()
             )
@@ -391,7 +395,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
     def test_read_keepass_bad_values(self):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
         with self.assertRaises(ValueError) as raises_cm:
-            _ = ConfigWithKeypass(
+            _ = ConfigWithKeypass.build_config_from_ini_env(
                 file_name='test_keepass_bad_values.ini',
                 start_path=self.get_test_files_path()
             )
@@ -404,7 +408,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
     def test_read_keepass_bad2(self):
         os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
         with self.assertRaises(ValueError) as raises_cm:
-            config = ConfigWithBadKeypass(
+            config = ConfigWithBadKeypass.build_config_from_ini_env(
                 file_name='test_keepass_bad_missing_entirely.ini',
                 start_path=self.get_test_files_path()
             )
@@ -419,7 +423,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
             from pykeepass import PyKeePass
 
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithKeypass(
+            config = ConfigWithKeypass.build_config_from_ini_env(
                 file_name='test_keepass_good.ini',
                 start_path=self.get_test_files_path()
             )
@@ -443,7 +447,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
             from pykeepass import PyKeePass
 
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithKeypass(
+            config = ConfigWithKeypass.build_config_from_ini_env(
                 file_name='test_keepass_good.ini',
                 start_path=self.get_test_files_path()
             )
@@ -470,7 +474,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
 
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithTestFilePath(
+            config = ConfigWithTestFilePath.build_config_from_ini_env(
                 file_name='test_keepass_good_keepass_sub.ini',
                 start_path=self.get_test_files_path()
             )
@@ -493,7 +497,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
 
         try:
             os.environ['test_settings_config_files_path'] = str(self.get_test_files_path())
-            config = ConfigWithTestFilePath(
+            config = ConfigWithTestFilePath.build_config_from_ini_env(
                 file_name='test_keepass_good_keepass_shared_sub.ini',
                 start_path=self.get_test_files_path()
             )
@@ -510,7 +514,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
 
     def test_read_sub_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
-            _ = ConfigToTestWith(
+            _ = ConfigToTestWith.build_config_from_ini_env(
                 file_name='test_keepass_bad_missing_sub.ini',
                 start_path=self.get_test_files_path()
             )
@@ -522,7 +526,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
 
     def test_read_shared_sub_keepass_bad1(self):
         with self.assertRaises(ValueError) as raises_cm:
-            _ = ConfigToTestWith(
+            _ = ConfigToTestWith.build_config_from_ini_env(
                 file_name='test_keepass_bad_missing_shared_sub.ini',
                 start_path=self.get_test_files_path()
             )
@@ -543,7 +547,7 @@ class TestIniParser(unittest.TestCase, Base_Tests_Mixin):
         try:
             password = 'mysuperpassword'
             keyring.set_password('example_section', 'python_unittester_01', password)
-            config = ConfigToTestWith(
+            config = ConfigToTestWith.build_config_from_ini_env(
                 file_name='test_keyring.ini',
                 start_path=self.get_test_files_path()
             )

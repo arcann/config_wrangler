@@ -1,14 +1,19 @@
 import inspect
 import logging
 import sys
+import typing
 import warnings
-from typing import List, Any
+from pathlib import Path
+from typing import List, Any, Self
 
 from pydantic import PrivateAttr, BaseModel
 
+if typing.TYPE_CHECKING:
+    from config_wrangler.config_data_loaders.base_config_data_loader import BaseConfigDataLoader
 from config_wrangler.config_templates.config_hierarchy import ConfigHierarchy
 from config_wrangler.config_templates.credentials import PasswordDefaults
 from config_wrangler.config_wrangler_config import ConfigWranglerConfig
+from config_wrangler.utils import merge_configs, process_inheritance, process_errors_list, interpolate_values
 
 private_attrs = ('_root_config', '_parents', '_name_map')
 
@@ -139,3 +144,161 @@ class ConfigRoot(ConfigHierarchy):
             errors_str = f"\n{indent}".join(errors)
             sys.tracebacklimit = 0
             raise ValueError(f"Config Errors (cnt={len(errors)}). Errors=\n{indent}{errors_str}")
+
+    @classmethod
+    def _get_config_data_from_loaders(
+            cls,
+            config_data_loaders: List['BaseConfigDataLoader'],
+            config_load_log_level: int = logging.INFO,
+            starting_config_data: dict[str, Any] | None = None,
+            ignore_file_not_found: bool = False,
+    ) -> dict[str, Any]:
+        logging.basicConfig(level=config_load_log_level)
+        log = logging.getLogger(__name__)
+
+        if starting_config_data is not None:
+            config_data = dict(**starting_config_data)
+        else:
+            config_data = {}
+
+        for loader in config_data_loaders:
+            log.debug(f"Loading config with {loader}")
+            try:
+                loader_config_data = loader.read_config_data(cls)
+                merge_configs(config_data, loader_config_data)
+            except FileNotFoundError as e:
+                if ignore_file_not_found:
+                    log.warning(f"{e} with loader {loader}")
+                else:
+                    raise
+
+        log.debug("Processing Section Inheritance")
+        inheritance_errors = process_inheritance(config_data, root_config_data=config_data)
+        process_errors_list(
+            errors_list=inheritance_errors,
+            function_name='Section Inheritance'
+        )
+
+        log.debug("Interpolating config value references")
+        interpolate_errors = interpolate_values(config_data, root_config_data=config_data)
+        process_errors_list(
+            errors_list=interpolate_errors,
+            function_name='Value Interpolation'
+        )
+        return config_data
+
+    @classmethod
+    def build_config_from_loaders(
+            cls,
+            config_data_loaders: List['BaseConfigDataLoader'],
+            config_load_log_level: int = logging.INFO,
+            starting_config_data: dict[str, Any] | None = None,
+            ignore_file_not_found: bool = False,
+    ) -> Self:
+        config_data = cls._get_config_data_from_loaders(
+            config_data_loaders=config_data_loaders,
+            config_load_log_level=config_load_log_level,
+            starting_config_data=starting_config_data,
+            ignore_file_not_found=ignore_file_not_found,
+        )
+        return cls(**config_data)
+
+    @classmethod
+    def build_config_from_ini(
+            cls,
+            file_name: str = 'config.ini',
+            start_path: str | Path | None = None,
+            config_load_log_level: int = logging.INFO,
+            **kwargs: dict[str, Any]
+    ) -> Self:
+        from config_wrangler.config_data_loaders.ini_config_data_loader import IniConfigDataLoader
+
+        file_loader = IniConfigDataLoader(start_path=start_path, file_name=file_name)
+        return cls.build_config_from_loaders(
+            config_data_loaders=[file_loader],
+            config_load_log_level=config_load_log_level,
+            starting_config_data=kwargs,
+        )
+
+    @classmethod
+    def build_config_from_ini_env(
+            cls,
+            file_name: str = 'config.ini',
+            start_path: str | Path | None = None,
+            config_load_log_level: int = logging.INFO,
+            **kwargs: dict[str, Any]
+    ) -> Self:
+        from config_wrangler.config_data_loaders.env_config_data_loader import EnvConfigDataLoader
+        from config_wrangler.config_data_loaders.ini_config_data_loader import IniConfigDataLoader
+
+        env_loader = EnvConfigDataLoader()
+        file_loader = IniConfigDataLoader(start_path=start_path, file_name=file_name)
+        return cls.build_config_from_loaders(
+            config_data_loaders=[env_loader, file_loader],
+            config_load_log_level=config_load_log_level,
+            starting_config_data=kwargs,
+        )
+
+    @classmethod
+    def build_config_from_toml_env(
+            cls,
+            file_name: str = 'config.toml',
+            start_path: str | Path | None = None,
+            config_load_log_level: int = logging.INFO,
+            **kwargs: dict[str, Any]
+    ) -> Self:
+        from config_wrangler.config_data_loaders.env_config_data_loader import EnvConfigDataLoader
+        from config_wrangler.config_data_loaders.toml_config_data_loader import TomlConfigDataLoader
+
+        env_loader = EnvConfigDataLoader()
+        file_loader = TomlConfigDataLoader(start_path=start_path, file_name=file_name)
+        return cls.build_config_from_loaders(
+            config_data_loaders=[env_loader, file_loader],
+            config_load_log_level=config_load_log_level,
+            starting_config_data=kwargs,
+        )
+
+    @classmethod
+    def build_config_from_yaml_env(
+            cls,
+            file_name: str = 'config.yaml',
+            start_path: str | Path | None = None,
+            config_load_log_level: int = logging.INFO,
+            **kwargs: dict[str, Any]
+    ) -> Self:
+        from config_wrangler.config_data_loaders.env_config_data_loader import EnvConfigDataLoader
+        from config_wrangler.config_data_loaders.yaml_config_data_loader import YamlConfigDataLoader
+
+        env_loader = EnvConfigDataLoader()
+        file_loader = YamlConfigDataLoader(start_path=start_path, file_name=file_name)
+        return cls.build_config_from_loaders(
+            config_data_loaders=[env_loader, file_loader],
+            config_load_log_level=config_load_log_level,
+            starting_config_data=kwargs,
+        )
+
+    @classmethod
+    def build_config_from_many_file_env(
+            cls,
+            file_base_name: str = 'config',
+            start_path: str | Path | None = None,
+            config_load_log_level: int = logging.INFO,
+            **kwargs: dict[str, Any]
+    ) -> Self:
+        from config_wrangler.config_data_loaders.env_config_data_loader import EnvConfigDataLoader
+        from config_wrangler.config_data_loaders.ini_config_data_loader import IniConfigDataLoader
+        from config_wrangler.config_data_loaders.toml_config_data_loader import TomlConfigDataLoader
+        from config_wrangler.config_data_loaders.yaml_config_data_loader import YamlConfigDataLoader
+
+        env_loader = EnvConfigDataLoader()
+
+        ini_file_loader = IniConfigDataLoader(start_path=start_path, file_name=f"{file_base_name}.ini")
+        toml_file_loader = TomlConfigDataLoader(start_path=start_path, file_name=f"{file_base_name}.toml")
+        yaml_file_loader = YamlConfigDataLoader(start_path=start_path, file_name=f"{file_base_name}.yaml")
+
+        return cls.build_config_from_loaders(
+            config_data_loaders=[env_loader, ini_file_loader, toml_file_loader, yaml_file_loader],
+            config_load_log_level=config_load_log_level,
+            starting_config_data=kwargs,
+            ignore_file_not_found=True,
+        )

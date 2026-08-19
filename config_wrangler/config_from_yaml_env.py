@@ -2,11 +2,14 @@ import logging
 from pathlib import Path
 from typing import *
 
+from typing_extensions import deprecated
+
 from config_wrangler.config_data_loaders.env_config_data_loader import EnvConfigDataLoader
 from config_wrangler.config_data_loaders.yaml_config_data_loader import YamlConfigDataLoader
 from config_wrangler.config_from_loaders import ConfigFromLoaders
 
 
+@deprecated("Please use ConfigRoot.build_config_from_yaml_env instead.")
 class ConfigFromYamlEnv(ConfigFromLoaders):
     # noinspection PyMethodParameters
     def __init__(
