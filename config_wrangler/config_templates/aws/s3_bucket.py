@@ -131,9 +131,13 @@ class S3_Bucket(AWS_Session):
     treat_as_folder: bool = False  #: Whether to treat the key as a folder prefix
 
     _service: str = PrivateAttr(default='s3')
-    _object_cache: dict[str, 'Object | ObjectVersion'] = PrivateAttr(default=None)
+    _object_cache: dict[str, 'Object | ObjectVersion'] = PrivateAttr(default_factory=dict)
 
     OverwriteModes: ClassVar[type[OverwriteModes]] = OverwriteModes
+
+    def model_post_init(self, __context: Any) -> None:
+        # Executes automatically after Pydantic finishes validation
+        self._service = 's3'
 
     def __str__(self):
         """
@@ -231,7 +235,7 @@ class S3_Bucket(AWS_Session):
         """
         region = self.client.get_bucket_location(Bucket=self.bucket_name)['LocationConstraint']
         # Buckets in Region us-east-1 have a LocationConstraint of null
-        if region is None:
+        if region is None or region == '':
             region = 'us-east-1'
         return region
 
@@ -996,10 +1000,13 @@ class S3_Bucket(AWS_Session):
         Object | ObjectVersion
             The boto3 Object or ObjectVersion resource.
         """
-        if self._object_cache is None:
-            self._object_cache = {}
         hash_key = f"{self.bucket_name}:{key},version={version_id}"
         try:
+            try:
+                if self._object_cache is None:
+                    object.__setattr__(self, '_object_cache', {})
+            except TypeError:
+                object.__setattr__(self, '_object_cache', {})
             return self._object_cache[hash_key]
         except KeyError:
             s3_object = self.get_object_uncached(key, version_id=version_id)

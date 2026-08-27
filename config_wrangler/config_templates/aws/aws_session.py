@@ -36,8 +36,8 @@ class AWS_Session(Credentials):
 
     iam_role: Optional[str] = None
 
-    _session: boto3.session.Session = PrivateAttr(default=None)
-    _service: str = PrivateAttr(default=None)
+    _session: boto3.session.Session | None = PrivateAttr(default=None)
+    _service: str | None = PrivateAttr(default=None)
 
     @property
     def session(self) -> boto3.session.Session:
@@ -62,6 +62,7 @@ class AWS_Session(Credentials):
 
             print(f"Session Credentials Provider: {credentials.method}")
             print(f"Session CredentialsRefreshable: {isinstance(credentials, RefreshableCredentials)}")
+            assert self._session is not None
         return self._session
 
     def set_session(self, session: boto3.session.Session):
@@ -147,9 +148,10 @@ class AWS_Session(Credentials):
             role_arn=self.iam_role,
         )
 
-    def _get_resource(self, service: str = None):
+    def _get_resource(self, service: str | None = None):
         if service is None:
             service = self._service
+
         # noinspection PyTypeChecker
         return self.session.resource(service, region_name=self.region_name)
 

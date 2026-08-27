@@ -1,21 +1,20 @@
 [project]
 name = "config_wrangler"
-version = "1.6.0a1"
+version = "1.6.0a2"
 description = "pydantic based configuration wrangler. Handles reading multiple ini or toml files with inheritance rules and variable expansions."
 authors = [{ name = "Derek Wood" }]
-requires-python = ">=3.10, <4.0.0"
+requires-python = ">=3.11, <4.0.0"
 readme = "README.md"
 license = "MIT"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "pydantic>=2.0",
+    "pydantic>=2.7",
     "StrEnum>=0.4.7",
     "auto-all>=1.4.1",
     "pydicti>=1.1.6",
