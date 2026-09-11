@@ -10,6 +10,9 @@ class PasswordSource(StrEnum):
     KEYRING = auto()
     KEEPASS = auto()
     AWS_ASSUME_ROLE = auto()
+    DATABRICKS_WORKSPACE_SECRET = auto()
+    DATABRICKS_CATALOG_SECRET = auto()
+    DATABRICKS_SERVICE_CREDENTIALS = auto()
 
 
 def _check_password_source(value: Any) -> PasswordSource:

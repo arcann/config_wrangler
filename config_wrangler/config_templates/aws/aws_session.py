@@ -35,6 +35,7 @@ class AWS_Session(Credentials):
     region_name: Optional[str] = None
 
     iam_role: Optional[str] = None
+    databricks_service_credential: Optional[str] = None
 
     _session: boto3.session.Session | None = PrivateAttr(default=None)
     _service: str | None = PrivateAttr(default=None)
@@ -52,6 +53,25 @@ class AWS_Session(Credentials):
                 )
                 if self.iam_role is not None:
                     self.assume_role()
+            elif self.password_source == PasswordSource.DATABRICKS_SERVICE_CREDENTIALS:
+                if self.databricks_service_credential is None:
+                    raise ValueError(
+                        "Password source = DATABRICKS_SERVICE_CREDENTIALS but databricks_service_credential "
+                        "was not provided. "
+                    )
+                try:
+                    from databricks.sdk.runtime import dbutils
+                except ImportError as e:
+                    raise RuntimeError(
+                        "DATABRICKS_SERVICE_CREDENTIALS password mode needs to run in an environment "
+                        f"that includes databricks.sdk (got {repr(e)})."
+                    )
+                self._session = boto3.Session(
+                    botocore_session=dbutils.credentials.getServiceCredentialsProvider(
+                        self.databricks_service_credential
+                    ),
+                    region_name=self.region_name,
+                )
             else:
                 self._session = boto3.session.Session(
                     aws_access_key_id=self.user_id,

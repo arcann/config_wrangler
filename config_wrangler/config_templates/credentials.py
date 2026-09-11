@@ -41,12 +41,14 @@ class Credentials(ConfigHierarchy):
     See https://pypi.org/project/keyring/
     or https://github.com/jaraco/keyring
     """
+
     keepass_config: Optional[str] = 'keepass'
     """
     If the password_source is KEEPASS, then which root level config item contains
     the settings for Keepass (must be an instance of 
     :py:class:`config_wrangler.config_templates.keepass_config.KeepassConfig`)
     """
+
     keepass: Optional[KeepassConfig] = None
     """
     If the password_source is KEEPASS, then load a sub-section with the 
@@ -66,6 +68,30 @@ class Credentials(ConfigHierarchy):
     """
     If the password_source is KEEPASS, this is an optional filter on the title
     of the keepass entries in the group.
+    """
+
+    databricks_secret_scope: Optional[str] = None
+    """
+    If the password_source is DATABRICKS_WORKSPACE_SECRET, then which secret scope
+    should this module look for the password in.
+    
+    See https://docs.databricks.com/aws/en/security/secrets/
+    """
+
+    databricks_secret_catalog: Optional[str] = None
+    """
+    If the password_source is DATABRICKS_CATALOG_SECRET, then which catalog
+    should this module look for the password in.
+    
+    See https://docs.databricks.com/aws/en/security/secrets/unity-catalog-secrets
+    """
+
+    databricks_secret_schema: Optional[str] = None
+    """
+    If the password_source is DATABRICKS_CATALOG_SECRET, then which schema
+    should this module look for the password in.
+    
+    See https://docs.databricks.com/aws/en/security/secrets/unity-catalog-secrets
     """
 
     validate_password_on_load: bool = True
@@ -197,6 +223,30 @@ class Credentials(ConfigHierarchy):
 
         return password, search_info
 
+    def _get_password_databricks(self):
+        try:
+            from databricks.sdk.runtime import dbutils
+        except ImportError as e:
+            raise RuntimeError(
+                "DATABRICKS_SERVICE_CREDENTIALS password mode needs to run in an environment "
+                f"that includes databricks.sdk (got {repr(e)})."
+            )
+        if self.password_source == PasswordSource.DATABRICKS_WORKSPACE_SECRET:
+            return dbutils.secrets.get(
+                scope=self.databricks_secret_scope,
+                key=self.user_id,
+            )
+        elif self.password_source == PasswordSource.DATABRICKS_CATALOG_SECRET:
+            return dbutils.secrets.get(
+                catalog=self.databricks_secret_catalog,
+                schema=self.databricks_secret_schema,
+                key=self.user_id,
+            )
+        elif self.password_source == PasswordSource.DATABRICKS_SERVICE_CREDENTIALS:
+            return 'NOT A REAL PASSWORD'
+        else:
+            raise ValueError("_get_password_databricks called for non databricks source")
+
     def get_password(self) -> str:
         """
         Get the password for this resource.
@@ -237,7 +287,12 @@ class Credentials(ConfigHierarchy):
                 password, search_info = self._get_password_keepass()
             elif self.password_source == PasswordSource.AWS_ASSUME_ROLE:
                 password = 'NOT A REAL PASSWORD'
-                password_source = 'Assume Role'
+            elif self.password_source in {
+                PasswordSource.DATABRICKS_WORKSPACE_SECRET,
+                PasswordSource.DATABRICKS_CATALOG_SECRET,
+                PasswordSource.DATABRICKS_SERVICE_CREDENTIALS
+            }:
+                password = self._get_password_databricks()
             else:
                 raise ValueError(f"invalid password_source")
         except Exception as e:
