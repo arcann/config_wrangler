@@ -307,7 +307,10 @@ class Credentials(ConfigHierarchy):
     def check_model(self):
         user_id = self.user_id
         if user_id == '' or user_id is None:
-            if self.password_source != PasswordSource.AWS_ASSUME_ROLE:
+            if self.password_source not in {
+                PasswordSource.AWS_ASSUME_ROLE,
+                PasswordSource.DATABRICKS_SERVICE_CREDENTIALS
+            }:
                 raise ValueError("user_id not provided")
 
         if self.password_source == PasswordSource.KEYRING:
