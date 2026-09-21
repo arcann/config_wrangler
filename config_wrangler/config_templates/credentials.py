@@ -276,6 +276,7 @@ class Credentials(ConfigHierarchy):
                         f"and 'passwords' section does not have 'password_source' {e} "
                     )
 
+        search_info = 'N/A'
         try:
             if self.password_source == PasswordSource.KEYRING:
                 password, search_info = self._get_password_keyring()
@@ -290,7 +291,7 @@ class Credentials(ConfigHierarchy):
             elif self.password_source in {
                 PasswordSource.DATABRICKS_WORKSPACE_SECRET,
                 PasswordSource.DATABRICKS_CATALOG_SECRET,
-                PasswordSource.DATABRICKS_SERVICE_CREDENTIALS
+                PasswordSource.DATABRICKS_SERVICE_CREDENTIALS,
             }:
                 password = self._get_password_databricks()
             else:
@@ -299,7 +300,10 @@ class Credentials(ConfigHierarchy):
             raise ValueError(f"{self.full_item_name()} with password_source={self.password_source} got error {e}")
 
         if password is None or password == '':
-            raise ValueError(f"{self.full_item_name()} password is not set. Source is {self.password_source} location = {search_info}")
+            raise ValueError(
+                f"{self.full_item_name()} password is not set. "
+                f"Source is {self.password_source} location = {search_info}"
+            )
 
         return password
 
