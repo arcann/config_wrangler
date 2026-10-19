@@ -1308,7 +1308,7 @@ class S3_Bucket(AWS_Session):
             List containing bucket name followed by key parts.
         """
         key = PurePosixPath(self._get_key())
-        return [self.bucket_name].extend(key.parts)
+        return [self.bucket_name, *key.parts]
 
     @property
     def name(self):
