@@ -1298,7 +1298,7 @@ class S3_Bucket(AWS_Session):
                 ]
 
     @property
-    def parts(self):
+    def parts(self) -> list[str]:
         """
         Get the parts of the S3 path (bucket name + key parts).
 
@@ -1311,7 +1311,7 @@ class S3_Bucket(AWS_Session):
         return [self.bucket_name, *key.parts]
 
     @property
-    def name(self):
+    def name(self) -> str:
         """
         Get the final component of the S3 key.
 
@@ -1324,7 +1324,7 @@ class S3_Bucket(AWS_Session):
         return key.name
 
     @property
-    def suffix(self):
+    def suffix(self) -> str:
         """
         Get the file extension of the S3 key.
 

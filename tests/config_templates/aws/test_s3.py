@@ -138,6 +138,18 @@ class TestS3HelperFunctions(unittest.TestCase, Base_Tests_Mixin):
         dne_file = folder1 / 'this_does_not_exist'
         self.assertFalse(dne_file.is_file())
 
+    def test_path_parts(self):
+        bucket = S3_Bucket(
+            bucket_name=self.bucket1_name,
+            user_id='mock_user',
+            raw_password='super secret password',
+            password_source=PasswordSource.CONFIG_FILE,
+        )
+        file = bucket / self.example1_key
+        file_parts = file.parts
+
+        self.assertEqual([bucket.bucket_name, self.example1_key], file_parts)
+
     def test_list_files(self):
         bucket = S3_Bucket(
             bucket_name=self.bucket1_name,
