@@ -584,6 +584,8 @@ def build_referenced_objects(
                             f"{instance_class_name} got {instance_class} which is not a subclass of {inner_type}. "
                             "This could lead to errors if the class does not implement all attributes & methods."
                         )
+                    # Remove the CLASS_ATTRIBUTE_NAME key & value before instantiating
+                    del ref_section_value[CLASS_ATTRIBUTE_NAME]
                     # Build pydantic instance
                     inner_type_instance = instance_class(**ref_section_value)
                 else:
